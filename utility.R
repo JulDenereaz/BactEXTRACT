@@ -1,7 +1,7 @@
 
 
 themes <- c("BW" , "Classic", "Light", "Minimal", "Gray")
-react <- c("conditions", "conditions_old", "data", "df", "df_melt", "groups", "RLU", "RLU_melt", "groups2", "groups3", "interactions", "names", "rawdata", "themes_map")
+react <- c("conditions", "rawdata_list", "dataList", "groups", "interactions", "names", "rawdata", "themes_map")
 
 getFile <- function(datapath) {
   rawTableList <- list()
@@ -37,19 +37,89 @@ getFile <- function(datapath) {
       subTableDF <- subTableDF[, colSums(is.na(subTableDF)) != nrow(subTableDF)]
       
       #Removing Temp and Cycle columns
-      subTableDF <- subTableDF[, -grep("Temp", colnames(subTableDF))]
-      subTableDF <- subTableDF[, -grep("Cycle", colnames(subTableDF))]
-      
-      #Renaming the column "Time [s]" into "Time", and transforming into hours
-      colnames(subTableDF)[grep("Time", colnames(subTableDF))] <- "Time"
-      rawdata[colnames(rawdata) == "Time"] <-  rawdata[colnames(rawdata) == "Time"]/3600
+      rawTableList$time <- subTableDF[, grep("Time", colnames(subTableDF))]/3600
+      subTableDF <- subTableDF[, -grep("Temp|Time|Cycle", colnames(subTableDF))]
       
       #Append to the list
-      rawTableList[[rawdata[indexStart[i]-1,1]]] <- subTableDF
+      rawTableList[[rawdata[indexStart[i]-1,1]]] <- as.data.frame(subTableDF)
     }
   }
   return(rawTableList)
 }
+
+updateGroup <- function(groups, conditions, wells) {
+
+  if(is.null(groups)) {
+    groups <-  data.frame(Wells = wells, KeepWell="Yes", Preview=NA, stringsAsFactors = F)
+  }
+  currentConds <- colnames(groups[-c(1,2,3)])
+  x <- which(!(colnames(groups[-c(1,2,3)]) %in% conditions)) + 3
+  if(length(x) >= 1) {
+    groups <- groups[-x]
+  }
+  
+  #Only add new columns if a non-existing condition has been entered
+  groups[,setdiff(conditions, currentConds)] <- "NA"
+
+  
+  return(groups)
+}
+
+
+dataMelter <- function(dataList, groups, timeRange) {
+  
+
+  groups <- groups[groups$KeepWell == "Yes",]
+  if(nrow(groups) == 0) {
+    return(NULL)
+  }
+  #converting the conditions columns into factor
+  groups[-c(1,2,3)] <- lapply(groups[-c(1,2,3)] , factor)
+  
+  conditions <- names(groups)[-c(1,2,3)]
+  #looping over each subTable, skipping the time vector
+  dataList_melted <- lapply(dataList[-1], function(subTable) {
+    
+    #subset only selected wells with KeepWell
+    subTable <-  subTable[which(names(subTable) %in% c(groups$Wells))]
+    subTable <- subTable[which(dataList$time >= timeRange[1] & dataList$time <= timeRange[2]),]
+    subTable_melt = melt(cbind(data.frame(time = dataList$time), subTable), id=c('time'))
+    ind <- as.vector(match(subTable_melt$variable, groups$Wells))
+    lapply(conditions, function(cond) {
+      subTable_melt[cond] <<-  as.factor(as.vector(groups[,cond])[ind])
+    })
+    subTable_melt <- cbind(
+      aggregate(subTable_melt$value, by=subTable_melt[c("time", conditions)], FUN=mean),
+      aggregate(subTable_melt$value, by=subTable_melt[c("time", conditions)], function(x) sd(x)/sqrt(length(x)))[length(conditions)+2]
+    )
+    colnames(subTable_melt)  <-  c("time", conditions, "value", "SE")
+    return(subTable_melt)
+  })
+
+  return(dataList_melted)
+}
+
+
+
+getInteractions <- function(cond) {
+  if(length(cond) == 1) {
+    return(c())
+  }
+  return(unlist(apply(combn(cond,2), 2, function(x) {return(paste(x, collapse=", "))})))
+}
+
+formartConditions <- function(input) {
+  cond <- str_trim(unlist(strsplit(input,",")))
+  cond <- gsub("^[0-9]+", '', cond)
+  cond <- gsub("KeepWell|SE|time|value|Wells|Preview", '', cond)
+  cond <- gsub(" ", "_", cond)
+  cond <- unique(cond[cond != ""])
+  return(cond)
+}
+
+
+
+
 
 
 normalize <- function(df=NULL, method=NULL, baseOD=NULL) {
@@ -57,13 +127,13 @@ normalize <- function(df=NULL, method=NULL, baseOD=NULL) {
     return()
   }
   if(method == 'Mininum') {
-    return(data.frame(lapply(df[2:ncol(df)], function(x) x - min(x) + as.numeric(baseOD))))
+    return(data.frame(lapply(df, function(x) x - min(x) + as.numeric(baseOD))))
   }else if(method == '1st value') {
-    return(data.frame(lapply(df[2:ncol(df)], function(x) x - x[1] + as.numeric(baseOD))))
+    return(data.frame(lapply(df, function(x) x - x[1] + as.numeric(baseOD))))
   }else if(method == 'Min(wells 1-2-3)') {
-    return(data.frame(lapply(df[2:ncol(df)], function(x) x - min(x[1:3]) + as.numeric(baseOD))))
+    return(data.frame(lapply(df, function(x) x - min(x[1:3]) + as.numeric(baseOD))))
   }else if(method == 'No Normalisation') {
-    return(data.frame(lapply(df[2:ncol(df)], function(x) x=x)))
+    return(data.frame(lapply(df, function(x) x=x)))
   }
 }
 
