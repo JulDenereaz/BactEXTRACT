@@ -72,11 +72,13 @@ dataMelter <- function(dataList, groups, timeRange) {
   groups <- groups[groups$KeepWell == "Yes",]
   if(nrow(groups) == 0) {
     return(NULL)
+
   }
   #converting the conditions columns into factor
   groups[-c(1,2,3)] <- lapply(groups[-c(1,2,3)] , factor)
   
   conditions <- names(groups)[-c(1,2,3)]
+
   #looping over each subTable, skipping the time vector
   dataList_melted <- lapply(dataList[-1], function(subTable) {
     

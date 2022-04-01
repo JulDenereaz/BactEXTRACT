@@ -328,8 +328,7 @@ server <- function(input, output, session) {
     if(is.null(v$dataList_melt)) {
       return()
     }
-    
-    
+    View(v$dataList_melt)
     
     #     
     # 
