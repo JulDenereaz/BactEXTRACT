@@ -1,7 +1,7 @@
 
 
 themes <- c("BW" , "Classic", "Light", "Minimal", "Gray")
-react <- c("conditions", "rawdata_list", "dataList", "groups", "interactions", "names", "rawdata", "themes_map")
+react <- c("conditions", "rawdata_list", "dataList", "groups", "groupsDF", "interactions", "names", "rawdata", "themes_map")
 
 getFile <- function(datapath) {
   rawTableList <- list()
@@ -124,7 +124,20 @@ formartConditions <- function(input) {
 }
 
 
-
+addReferenceCurve <- function(refLevel, fw, df) {
+  ref_df <- df[df[fw] == refLevel,]
+  newDF <- df[df[fw] != refLevel,]
+  newDF$facetRef = newDF[[fw]]
+  ref_df <- do.call(rbind, lapply(levels(newDF[[fw]]), function(level) {
+    if(level != refLevel) {
+      df <-  ref_df
+      df$facetRef <- level
+      return(df)
+    }
+  }))
+  newDF <- rbind(newDF, ref_df)
+  return(newDF)
+}
 
 
 
