@@ -31,7 +31,7 @@ ui = dashboardPage(
     fileInput("files", "Choose TECAN Excel File",
               multiple = TRUE,
               accept = c(".xlsx", ".txt")),
-    initStore("locaStorage", "BactEXTRACT_storage"),
+    initStore("localStorage", "BactEXTRACT_storage"),
     
     div(style="height:calc(100vh - 250px);",
         width=12,
@@ -165,7 +165,7 @@ server <- function(input, output, session) {
           # checkboxInput('RLU', 'RLU', value = F),
           selectInput('norm', 'OD Normalisation :', choices=c('Mininum', '1st value', 'Min(wells 1-2-3)', "No Normalisation")),
           selectInput('norm_baseOD', 'Base OD', choices=c(0, 0.001, 0.002, 0.003, 0.004), selected = 0.001),
-          textInput('conditionsUI_Input', 'Enter Conditions:', value="", placeholder = "Strain, Treatment, ..."),
+          textInput('conditionsUI_Input', 'Enter Conditions:', value=paste(input$localStorage$cond, collapse = ","), placeholder = "Strain, Treatment, ..."),
           uiOutput('error_condition'),
           column(12, align="center", p('(Cannot start with number, separated by coma)')),     
           column(12, align="center", actionButton('updateCond', 'Update'))
