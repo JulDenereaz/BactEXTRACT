@@ -19,6 +19,8 @@ library(Cairo)
 library(sortable)
 library(shinythemes)
 library(RColorBrewer)
+library(shinyStore)
+library(xlsx)
 source('utility.R', local = TRUE)
 
 version <- "0.1"
@@ -29,12 +31,12 @@ ui = dashboardPage(
     fileInput("files", "Choose TECAN Excel File",
               multiple = TRUE,
               accept = c(".xlsx", ".txt")),
+    initStore("locaStorage", "BactEXTRACT_storage"),
     
     div(style="height:calc(100vh - 250px);",
         width=12,
         uiOutput("multifiles_options"),
-        uiOutput("options"),
-        uiOutput("downloads"),
+        uiOutput("options")
     ),
     tags$hr(style='margin-bottom:5px'),
     column(
@@ -58,13 +60,20 @@ ui = dashboardPage(
           status = 'primary',
           rHandsontableOutput("groups", height = 'calc(calc(100vh - 280px)/2)')
         ),
-        box(
+        tabBox(
           width=6,
           height='calc(calc(100vh - 140px)/2)',
-          title="Plot Options and Theme",
-          status = 'primary',
-          tags$style(HTML(".box {overflow-y:auto}")),
-          uiOutput("graph_options")
+          tabPanel(
+            'Settings', 
+              div(style = 'overflow-y:auto;height:calc(calc(100vh - 260px)/2)', 
+                uiOutput("graph_options")
+              )
+          ),
+          tabPanel(
+            'Downloads',
+            uiOutput("downloads"),
+            
+          )
         )
       ),
       column(
@@ -194,8 +203,9 @@ server <- function(input, output, session) {
         }))
       }
     }
-    #Changing the name of the standard OD to ODdata. The rest will stay custom, as it can be RLU/Luminescence etc...
-    names(v$rawdata_list)[2] <- "ODdata"
+    #Changing the name of the standard OD to OD. The rest will stay custom, as it can be RLU/Luminescence etc...
+    names(v$rawdata_list)[2] <- "OD"
+    
     
     
   })
@@ -206,25 +216,24 @@ server <- function(input, output, session) {
     v$conditions <- formartConditions(input$conditionsUI_Input)
     
     #v$groups is a dataframe containing all levels for each condition for each well
-    v$groups <- updateGroup(isolate(v$groups), v$conditions, colnames(v$rawdata_list$ODdata))
+    v$groups <- updateGroup(isolate(v$groups), v$conditions, colnames(v$rawdata_list$OD))
     
     v$interactions <- getInteractions(v$conditions)
     
     #normalization
     v$dataList <- isolate(v$rawdata_list)
-    v$dataList$ODdata = normalize(isolate(v$dataList$ODdata), input$norm, input$norm_baseOD)
-    
+    v$dataList$OD = normalize(isolate(v$dataList$OD), input$norm, input$norm_baseOD)
+    updateStore(session, name = "cond", value = v$conditions)
     
     
     #SapLine to preview the growth curve of each well
-    v$groups$Preview <- apply(v$dataList$ODdata, 2, function(x) jsonlite::toJSON(list(values=as.vector(x), options=list(type="line", spotRadius=0, chartRangeMin=0, chartRangeMax=1))))
-    
+    v$groups$Preview <- apply(v$dataList$OD, 2, function(x) jsonlite::toJSON(list(values=as.vector(x), options=list(type="line", spotRadius=0, chartRangeMin=0, chartRangeMax=1))))
     output$groups <- renderRHandsontable({
       req(v$groups)
       rhandsontable(
         data.frame(v$groups), 
         fillHandle = list(direction='vertical', autoInsertRow=FALSE),
-        maxRows = ncol(isolate(v$dataList$ODdata)),
+        maxRows = ncol(isolate(v$dataList$OD)),
         useTypes=T) %>%
         hot_col(col="Wells", readOnly = T, allowRowEdit =F, allowColEdit = F) %>%
         hot_col(col="KeepWell", type="dropdown", source=c("Yes", "No"), strict=T, allowInvalid=F, valign='htCenter') %>%
@@ -234,6 +243,7 @@ server <- function(input, output, session) {
     ##### UI graph options
     output$graph_options <- renderUI({
       fluidPage(
+
         list(
           splitLayout(
             column(
@@ -280,7 +290,7 @@ server <- function(input, output, session) {
           splitLayout(
             sliderInput('range', 'X axis range:', min=0, step=0.5, max=ceiling(max(v$dataList$time)), value=c(0, ceiling(max(v$dataList$time)))),
             uiOutput("logScaleUI")
-            
+
           ),
           splitLayout(
             sliderInput('size_l', 'Line Size:', min=0, max=4, value=1.2, step = 0.1),
@@ -301,12 +311,11 @@ server <- function(input, output, session) {
     })
     
     #To add: from local storage update
-    req(v$RLU)
-    output$RLUoptions <- renderUI({
-      list(
-        selectInput('RLUplotSelector', 'RLU Plots:', choices=c("No", "Only RLU", "Both OD & RLU"), width='100%')
-      )
-    })
+    # output$RLUoptions <- renderUI({
+    #   list(
+    #     selectInput('RLUplotSelector', 'RLU Plots:', choices=c("No", "Only RLU", "Both OD & RLU"), width='100%')
+    #   )
+    # })
     
   })
   
@@ -324,233 +333,203 @@ server <- function(input, output, session) {
     req(input$groups)
     v$groups[colnames(data.frame(hot_to_r(input$groups)))] <- data.frame(hot_to_r(input$groups))
     
-    v$dataList_melt <- dataMelter(v$dataList, v$groups, input$range)
-    if(is.null(v$dataList_melt)) {
+    v$dataList_melted <- dataMelter(v$dataList, v$groups, input$range)
+    if(is.null(v$dataList_melted)) {
       return()
     }
-    View(v$dataList_melt)
     
-    #     
-    # 
-    # 
-    # ##### RLU Data #####
-    # 
-    # if(!is.null(v$RLU)) {
-    #   dataOD <- v$data
-    #   RLU <- v$RLU
-    #   RLU <- cbind(dataOD[1], RLU/dataOD[-1])
-    # 
-    #   RLU <- RLU[which(RLU$time >= input$range[1] & RLU$time <= input$range[2]),]
-    #   RLU_melt <- melt(RLU[which(names(RLU) %in% c(v$groups3$Wells, "time"))], id=c('time'))
-    #   ind <- as.vector(match(RLU_melt$variable, v$groups3$Wells))
-    #   for(cond in v$conditions) {
-    #     RLU_melt[cond] <- as.factor(as.vector(v$groups3[,cond])[ind])
-    #   }
-    #   RLU_melt <- cbind(
-    #     aggregate(RLU_melt$value, by=RLU_melt[c("time", v$conditions)], FUN=mean),
-    #     aggregate(RLU_melt$value, by=RLU_melt[c("time", v$conditions)], function(x) sd(x)/sqrt(length(x)))[length(v$conditions)+2]
-    #   )
-    #   colnames(RLU_melt)  <-  c("time", v$conditions, "RLU", "SE")
-    #   v$RLU_melt <- RLU_melt
-    # 
-    #   req(input$lvlOrderSelect)
-    # }
-    # 
-    # 
-    # 
-    # output$downloads <- renderUI({
-    #   list(
-    #     column(12, align="center",
-    #            tags$hr(),
-    #            tags$style(".skin-blue .sidebar a { color: #444; }"),
-    #            downloadButton("downloaddf", label = "Download Full Data"),
-    #            tags$p(""),
-    #            downloadButton("downloadpdf", label = "Download Growth Plot (PDF)"),
-    #            downloadButton("downloadeps", label = "Download Growth Plot (EPS)"),
-    #            tags$hr(),
-    #            downloadButton("downloadquc", label = "Download AUC Data"),
-    #            tags$p(),
-    #            downloadButton("downloadquc_plot", label = "Download AUC Plot")
-    #     )
-    #   )
-    # })
-    # output$downloaddf <- downloadHandler(
-    #   filename = function() {
-    #     "dataframe.csv"
-    #   },
-    #   content = function(file) {
-    #     write.csv(v$df_melt, file, row.names = FALSE)
-    #   }
-    # )
-    # output$downloadpdf <- downloadHandler(
-    #   filename = function(){paste(input$title,'.pdf', sep='')},
-    #   content = function(file){
-    #     ggsave(file,plot=v$p, width=input$width, height=input$height, units="in", dpi=300, device=cairo_pdf)
-    #   }
-    # )
-    # output$downloadeps <- downloadHandler(
-    #   filename = function(){paste(input$title,'.eps', sep='')},
-    #   content = function(file){
-    #     ggsave(file,plot=v$p, width=input$width, height=input$height, units="in", dpi=300, device=cairo_ps)
-    #   }
-    # )
-    # observeEvent(input$logScale, {
-    #   if(input$logScale) {
-    #     output$logScaleUI <- renderUI({
-    #       list(
-    #         sliderTextInput('yAxisRange', 'Y axis range:', selected =c(0.001, 1), choices = c(0.001, 0.01, 0.1, 1, 10), grid=T)
-    #       )
-    #     })
-    #   }else {
-    #     output$logScaleUI <- renderUI({
-    #       list(
-    #         sliderInput('yAxisRange', 'Y axis range:', min=0, step=0.1, max=ceiling(max(v$df_melt$value)), value=c(0, ceiling(max(v$df_melt$value))))
-    #       )
-    #     })
-    #   }
-    # 
-    # })
-    # observeEvent(input$lvlOrderSelect, {
-    #   output$levelOrderUI <- renderUI({
-    #     list(
-    #       rank_list(
-    #         text = paste(input$lvlOrderSelect, ' levels order:'),
-    #         labels = isolate(levels(v$groups3[[input$lvlOrderSelect]])),
-    #         input_id = "lvlOrderSorted",
-    #         options = sortable_options(),
-    #         class = "default-sortable"
-    #       )
-    #     )
-    #   })
-    # })
+    output$downloads <- renderUI({
+      list(
+        column(12, align="center",
+               tags$hr(),
+               tags$style(".skin-blue .sidebar a { color: #444; }"),
+               downloadButton("downloaddf", label = "Download Full Data"),
+               tags$p(""),
+               downloadButton("downloadpdf", label = "Download Growth Plot (PDF)"),
+               downloadButton("downloadeps", label = "Download Growth Plot (EPS)"),
+               tags$hr(),
+               downloadButton("downloadquc", label = "Download AUC Data"),
+               tags$p(),
+               downloadButton("downloadquc_plot", label = "Download AUC Plot")
+        )
+      )
+    })
+    output$downloaddf <- downloadHandler(
+      filename = function() {
+        "dataframe.csv"
+      },
+      content = function(file) {
+        write.csv(v$dataList_melted[[1]], file, row.names = FALSE)
+        
+      }
+    )
+    output$downloadpdf <- downloadHandler(
+      filename = function(){paste(input$title,'.pdf', sep='')},
+      content = function(file){
+        ggsave(file,plot=v$p, width=input$width, height=input$height, units="in", dpi=300, device=cairo_pdf)
+      }
+    )
+    output$downloadeps <- downloadHandler(
+      filename = function(){paste(input$title,'.eps', sep='')},
+      content = function(file){
+        ggsave(file,plot=v$p, width=input$width, height=input$height, units="in", dpi=300, device=cairo_ps)
+      }
+    )
+    observeEvent(input$logScale, {
+      if(input$logScale) {
+        output$logScaleUI <- renderUI({
+          list(
+            sliderTextInput('yAxisRange', 'Y axis range:', selected =c(0.001, 1), choices = c(0.001, 0.01, 0.1, 1, 10), grid=T)
+          )
+        })
+      }else {
+        output$logScaleUI <- renderUI({
+          list(
+            sliderInput('yAxisRange', 'Y axis range:', min=0, step=0.1, max=ceiling(max(v$dataList_melted$OD$value)), value=c(0, ceiling(max(v$dataList_melted$OD$value))))
+          )
+        })
+      }
+
+    })
+    observeEvent(input$lvlOrderSelect, {
+      output$levelOrderUI <- renderUI({
+        list(
+          rank_list(
+            text = paste(input$lvlOrderSelect, ' levels order:'),
+            labels = unique(isolate(v$groups[[input$lvlOrderSelect]])),
+            input_id = "lvlOrderSorted",
+            options = sortable_options(),
+            class = "default-sortable"
+          )
+        )
+      })
+    })
 
   })
 
-  # 
-  # observeEvent(v$df_melt, {
-  #   output$plot <- renderPlot({
-  #     req(input$yAxisRange)
-  #     v$RLU_melt
-  #     v$customP
-  #     v$themes_map <- list(
-  #       "BW" = theme_bw(base_size = input$size),      
-  #       "Classic" = theme_classic(base_size = input$size),
-  #       "Light" = theme_light(base_size = input$size),
-  #       "Minimal" = theme_minimal(base_size = input$size),
-  #       "Gray" = theme_gray(base_size = input$size)
-  #     )
-  #     
-  #     df <- v$df_melt
-  #     
-  #     if(!is.null(input$referenceCurve) && input$referenceCurve != "None") {
-  #       #modifying df_melt by adding a new group column, which will act as facetwrap separator, and duplicate the input$referenceCurve with levels names same as other
-  #       ref_df <- df[df[input$fw] == input$referenceCurve,]
-  #       newDF <- df[df[input$fw] != input$referenceCurve,]
-  #       newDF$facetRef = newDF[[input$fw]]
-  #       ref_df <- do.call(rbind, lapply(levels(newDF[[input$fw]]), function(level) {
-  #         if(level != input$referenceCurve) {
-  #           df = ref_df
-  #           df$facetRef = level
-  #           return(df)
-  #         }
-  #       }))
-  #       newDF <- rbind(newDF, ref_df)
-  #       df <- newDF
-  #     }
-  #     
-  #     if(input$logScale) {
-  #       df$Upper <- log10(df$value+df$SE)
-  #       df$Lower <- log10(df$value-df$SE)
-  #       df$value <- log10(df$value)
-  #     }else {
-  #       df$Upper <- df$value+df$SE
-  #       df$Lower <- df$value-df$SE
-  #       df$value <- df$value
-  #     }
-  #     
-  #     ##### OD Plot #####
-  #     p <-ggplot(data=df, aes_string(x="time", y="value"))
-  #     
-  #     
-  #     if(input$se == "Line Range") {
-  #       p <- p + geom_linerange(aes(ymin=Lower, ymax=Upper))
-  #       
-  #     }else if(input$se == "Ribbon") {
-  #       p <- p + geom_ribbon(aes(ymin=Lower, ymax=Upper), alpha=0.2, colour=NA)
-  #     }
-  #     if(input$color != 'None') {
-  #       
-  #       x <- nrow(unique(v$groups3[unlist(strsplit(input$color,", "))]))
-  #       p <- p + aes_string(col=paste0("interaction(", paste0(unlist(strsplit(input$color,", ")), collapse=", "),")"),
-  #                           fill=paste0("interaction(", paste0(unlist(strsplit(input$color,", ")), collapse=", "),")")) + 
-  #         scale_color_manual(values=getPalette(x, input$pal), aesthetics = c("colour", "fill"), name=input$color)
-  #     }
-  #     if(input$linetype != "None") {
-  #       p <- p + aes_string(linetype=input$linetype) + 
-  #         geom_line( size=input$size_l)
-  #     }else if(input$shape == "None") {
-  #       p <- p + geom_line(size=input$size_l)
-  #     }
-  #     if (input$fw != "None") {
-  #       if(!is.null(input$referenceCurve) && input$referenceCurve != "None") {
-  #         #modifying df_melt by adding a new group column, which will act as facetwrap separator, and duplicate the input$referenceCurve with levels names same as other
-  #         if(!is.null(v$RLU) && input$RLUplotSelector == 'Both OD & RLU') {
-  #           p <- p + facet_wrap(~facetRef, scales="free", nrow = 1)
-  #         }else {
-  #           p <- p + facet_wrap(~facetRef, scales="free")
-  #           
-  #         }
-  #       }else {
-  #         if(!is.null(v$RLU) && input$RLUplotSelector == 'Both OD & RLU') {
-  #           p <- p + facet_wrap(as.formula(paste("~", paste0(unlist(strsplit(input$fw,", ")), collapse="+"))), scales="free", nrow = 1)
-  #         }else {
-  #           p <- p + facet_wrap(as.formula(paste("~", paste0(unlist(strsplit(input$fw,", ")), collapse="+"))), scales="free")
-  #           
-  #         }
-  #       }
-  #     }
-  #     
-  #     if(input$shape != "None") {
-  #       p <- p + aes_string(shape=input$shape) +
-  #         geom_point(size=input$size_p)
-  #     }
-  #     if(input$grouping != "None") {
-  #       p <- p +aes_string(group=paste0("interaction(", paste0(unlist(strsplit(input$grouping,", ")), collapse=", "),")"))
-  #     }
-  #     p <- p + v$themes_map[[input$theme]]
-  #     if(input$logScale) {
-  #       tmp = as.numeric(input$yAxisRange)
-  #       if(tmp[1] == 0) {
-  #         return()
-  #       }
-  #       p <-  p +
-  #         scale_y_continuous(limits=c(log10(tmp[1]), log10(tmp[2])), expand=c(0,0), breaks=seq(log10(tmp[1]), log10(tmp[2]), 1), labels=10^seq(log10(tmp[1]), log10(tmp[2]), 1)) +
-  #         annotation_logticks(sides = "l", size = input$size/25, colour="black", outside=T, mid=unit(0.3, "cm"), long=unit(0.4, "cm"), short=unit(0.2, "cm"))
-  #     }else {
-  #       tmp = round(as.numeric(input$yAxisRange), 1)
-  #       p <- p + 
-  #         scale_y_continuous(limits=c(tmp[1], tmp[2]), expand=c(0, 0)) +
-  #         theme(axis.ticks = element_line(size=input$size/25),
-  #               axis.ticks.length = unit(0.3, "cm"))
-  #     }
-  #     
-  #     p <-  p +
-  #       scale_x_continuous(expand=c(0,0), limits = input$range) +
-  #       theme(axis.text.y.left = element_text(margin=margin(t=0, r=10, b=0, l=0))) +
-  #       coord_cartesian(clip = "off") +
-  #       labs(
-  #         linetype=input$linetype,
-  #         shape=input$shape,
-  #         x ="Time [h]",
-  #         y = "Cell Density [OD 595nm]")
-  #     if(!is.null(input$customThemeUI) && nchar(input$customThemeUI) > 0) {
-  #       str = paste0("list(", input$customThemeUI, ")")
-  #       if(inherits(try(p + eval(parse(text=str)), silent=TRUE), "try-error")) {
-  #         showNotification(p + eval(parse(text=str)))
-  #       }else {
-  #         p <- p + eval(parse(text=str))
-  #       }
-  #     }
+
+  observeEvent(v$dataList_melted, {
+    output$plot <- renderPlot({
+      req(input$yAxisRange)
+      v$customP
+      v$themes_map <- list(
+        "BW" = theme_bw(base_size = input$size),
+        "Classic" = theme_classic(base_size = input$size),
+        "Light" = theme_light(base_size = input$size),
+        "Minimal" = theme_minimal(base_size = input$size),
+        "Gray" = theme_gray(base_size = input$size)
+      )
+
+      df <- v$dataList_melted[[1]]
+
+      if(!is.null(input$referenceCurve) && input$referenceCurve != "None") {
+        #modifying df_melt by adding a new group column, which will act as facetwrap separator, and duplicate the input$referenceCurve with levels names same as other
+        ref_df <- df[df[input$fw] == input$referenceCurve,]
+        newDF <- df[df[input$fw] != input$referenceCurve,]
+        newDF$facetRef = newDF[[input$fw]]
+        ref_df <- do.call(rbind, lapply(levels(newDF[[input$fw]]), function(level) {
+          if(level != input$referenceCurve) {
+            df = ref_df
+            df$facetRef = level
+            return(df)
+          }
+        }))
+        newDF <- rbind(newDF, ref_df)
+        df <- newDF
+      }
+
+      if(input$logScale) {
+        df$Upper <- log10(df$value+df$SE)
+        df$Lower <- log10(df$value-df$SE)
+        df$value <- log10(df$value)
+      }else {
+        df$Upper <- df$value+df$SE
+        df$Lower <- df$value-df$SE
+        df$value <- df$value
+      }
+      ##### OD Plot #####
+      p <- ggplot(data=df, aes_string(x="time", y="value"))
+
+
+      if(input$se == "Line Range") {
+        p <- p + geom_linerange(aes(ymin=Lower, ymax=Upper))
+
+      }else if(input$se == "Ribbon") {
+        p <- p + geom_ribbon(aes(ymin=Lower, ymax=Upper), alpha=0.2, colour=NA)
+      }
+      if(input$color != 'None') {
+
+        x <- nrow(unique(v$groups3[unlist(strsplit(input$color,", "))]))
+        p <- p + aes_string(col=paste0("interaction(", paste0(unlist(strsplit(input$color,", ")), collapse=", "),")"),
+                            fill=paste0("interaction(", paste0(unlist(strsplit(input$color,", ")), collapse=", "),")")) +
+          scale_color_manual(values=getPalette(x, input$pal), aesthetics = c("colour", "fill"), name=input$color)
+      }
+      if(input$linetype != "None") {
+        p <- p + aes_string(linetype=input$linetype) +
+          geom_line( size=input$size_l)
+      }else if(input$shape == "None") {
+        p <- p + geom_line(size=input$size_l)
+      }
+      if (input$fw != "None") {
+        if(!is.null(input$referenceCurve) && input$referenceCurve != "None") {
+          #modifying df_melt by adding a new group column, which will act as facetwrap separator, and duplicate the input$referenceCurve with levels names same as other
+          if(!is.null(v$RLU) && input$RLUplotSelector == 'Both OD & RLU') {
+            p <- p + facet_wrap(~facetRef, scales="free", nrow = 1)
+          }else {
+            p <- p + facet_wrap(~facetRef, scales="free")
+
+          }
+        }else {
+          if(!is.null(v$RLU) && input$RLUplotSelector == 'Both OD & RLU') {
+            p <- p + facet_wrap(as.formula(paste("~", paste0(unlist(strsplit(input$fw,", ")), collapse="+"))), scales="free", nrow = 1)
+          }else {
+            p <- p + facet_wrap(as.formula(paste("~", paste0(unlist(strsplit(input$fw,", ")), collapse="+"))), scales="free")
+
+          }
+        }
+      }
+
+      if(input$shape != "None") {
+        p <- p + aes_string(shape=input$shape) +
+          geom_point(size=input$size_p)
+      }
+      if(input$grouping != "None") {
+        p <- p +aes_string(group=paste0("interaction(", paste0(unlist(strsplit(input$grouping,", ")), collapse=", "),")"))
+      }
+      p <- p + v$themes_map[[input$theme]]
+      if(input$logScale) {
+        tmp = as.numeric(input$yAxisRange)
+        if(tmp[1] == 0) {
+          return()
+        }
+        p <-  p +
+          scale_y_continuous(limits=c(log10(tmp[1]), log10(tmp[2])), expand=c(0,0), breaks=seq(log10(tmp[1]), log10(tmp[2]), 1), labels=10^seq(log10(tmp[1]), log10(tmp[2]), 1)) +
+          annotation_logticks(sides = "l", size = input$size/25, colour="black", outside=T, mid=unit(0.3, "cm"), long=unit(0.4, "cm"), short=unit(0.2, "cm"))
+      }else {
+        tmp = round(as.numeric(input$yAxisRange), 1)
+        p <- p +
+          scale_y_continuous(limits=c(tmp[1], tmp[2]), expand=c(0, 0)) +
+          theme(axis.ticks = element_line(size=input$size/25),
+                axis.ticks.length = unit(0.3, "cm"))
+      }
+
+      p <-  p +
+        scale_x_continuous(expand=c(0,0), limits = input$range) +
+        theme(axis.text.y.left = element_text(margin=margin(t=0, r=10, b=0, l=0))) +
+        coord_cartesian(clip = "off") +
+        labs(
+          linetype=input$linetype,
+          shape=input$shape,
+          x ="Time [h]",
+          y = "Cell Density [OD 595nm]")
+      if(!is.null(input$customThemeUI) && nchar(input$customThemeUI) > 0) {
+        str = paste0("list(", input$customThemeUI, ")")
+        if(inherits(try(p + eval(parse(text=str)), silent=TRUE), "try-error")) {
+          showNotification(p + eval(parse(text=str)))
+        }else {
+          p <- p + eval(parse(text=str))
+        }
+      }
   #     
   #     ##### RLU Plot #####
   #     if(!is.null(v$RLU) && input$RLUplotSelector != 'No') {
@@ -629,13 +608,13 @@ server <- function(input, output, session) {
   #       p <- ggarrange(p, pRLU,
   #                      ncol = 1, nrow = 2, align = "v")
   #     }      
-  #     v$p <- p
-  #     return(p)
-  #   }, width=reactive(input$width*72), height = reactive(input$height*72))
-  #   
-  # })
+      v$p <- p
+      return(p)
+    }, width=reactive(input$width*72), height = reactive(input$height*72))
+
+  })
   # 
-  # 
+
   # toListen3 <- reactive({
   #   list(input$fw, input$groups)
   # })
@@ -651,11 +630,14 @@ server <- function(input, output, session) {
   #   }
   # })
   # 
-  # observeEvent(input$lvlOrderSorted, {
-  #   v$groups3[input$lvlOrderSelect] <- isolate(factor(v$groups3[[input$lvlOrderSelect]], levels=c(input$lvlOrderSorted)))
-  #   v$df_melt[input$lvlOrderSelect] <- isolate(factor(v$df_melt[[input$lvlOrderSelect]], levels=c(input$lvlOrderSorted)))
-  #   v$RLU_melt[input$lvlOrderSelect] <- isolate(factor(v$RLU_melt[[input$lvlOrderSelect]], levels=c(input$lvlOrderSorted)))
-  # })
+  observeEvent(input$lvlOrderSorted, {
+    # v$groups[input$lvlOrderSelect] <- factor(v$groups[input$lvlOrderSelect], levels=c(input$lvlOrderSorted))
+    v$dataList_melted <- lapply(v$dataList_melted, function(df) {
+      df[input$lvlOrderSelect] <- isolate(factor(df[input$lvlOrderSelect], levels=c(input$lvlOrderSorted)))
+      return(df)
+    })
+    # View(v$dataList_melted)
+  })
   # 
   # observeEvent(input$range, {
   #   output$gro_opt <- renderUI({

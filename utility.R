@@ -33,9 +33,9 @@ getFile <- function(datapath) {
       #Removing non-numeric rows and columns
       subTableDF <- suppressWarnings(sapply(subTableDF, as.numeric))
       
-      #removing columns with only NA in it
+      #removing columns or rows with only NA in it
       subTableDF <- subTableDF[, colSums(is.na(subTableDF)) != nrow(subTableDF)]
-      
+      subTableDF <- subTableDF[rowSums(is.na(subTableDF)) != ncol(subTableDF),]
       #Removing Temp and Cycle columns
       rawTableList$time <- subTableDF[, grep("Time", colnames(subTableDF))]/3600
       subTableDF <- subTableDF[, -grep("Temp|Time|Cycle", colnames(subTableDF))]
@@ -97,6 +97,10 @@ dataMelter <- function(dataList, groups, timeRange) {
     colnames(subTable_melt)  <-  c("time", conditions, "value", "SE")
     return(subTable_melt)
   })
+  
+  
+  
+  
 
   return(dataList_melted)
 }
