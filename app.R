@@ -111,14 +111,13 @@ ui = dashboardPage(
 
 
 ##### Server function #####
-
 server <- function(input, output, session) {
   v <- reactiveValues()
   toListen2 <- reactive({
     list(input$norm,input$norm_baseOD, input$files)
   })
   v$customP <- NULL
-  getPalette = function(x, pal=NULL) {
+  getPalette <- function(x, pal=NULL) {
     ps = list(
       "Viridis" = viridis_pal(option = "viridis")(x),
       "Magma" = viridis_pal(option = "magma")(x),
@@ -176,6 +175,10 @@ server <- function(input, output, session) {
       lapply(react, function(reactVal){
         v[[reactVal]] <- NULL
       })
+      output$graph_options <- NULL
+      output$plot <- NULL
+      output$downloads <- NULL
+      output$groups <- NULL
     }
     
     tryCatch({
@@ -206,17 +209,18 @@ server <- function(input, output, session) {
     #Changing the name of the standard OD to OD. The rest will stay custom, as it can be RLU/Luminescence etc...
     names(v$rawdata_list)[2] <- "OD"
     
-    
-    
   })
 
   ##### Update button Panel #####
   observeEvent(input$updateCond, {
     req(input$conditionsUI_Input)
+    
+    
     v$conditions <- formartConditions(input$conditionsUI_Input)
     
+    
     #v$groups is a dataframe containing all levels for each condition for each well
-    if(!is.null(input$groups)) {
+    if(!is.null(v$groups)) {
       v$groups[colnames(data.frame(hot_to_r(input$groups)))] <- data.frame(hot_to_r(input$groups))
     }
     
@@ -338,6 +342,7 @@ server <- function(input, output, session) {
       return()
     }
     
+
     
     ##### Downloads UI #####
     output$downloads <- renderUI({
@@ -361,16 +366,15 @@ server <- function(input, output, session) {
         "dataframe.csv"
       },
       content <- function(file) {
-        write.csv(v$dataList_melted[[1]], file, row.names = FALSE)
+        write.csv(v$dataList_melted, file, row.names = FALSE)
       }
     )
     ##### LevelOrder UI #####
-    # v$newLevels <- list()
     output$levelOrderUI <- renderUI({
       list(
         rank_list(
           text = paste(input$lvlOrderSelect, ' levels order:'),
-          labels = levels(v$groupsDF[[input$lvlOrderSelect]]),
+          labels = isolate(levels(v$groupsDF[[input$lvlOrderSelect]])),
           input_id = "lvlOrderSorted",
           options = sortable_options(),
           class = "default-sortable"
@@ -378,6 +382,7 @@ server <- function(input, output, session) {
       )
     })
     
+
     
     ##### Log Scale UI #####
     if(input$logScale) {
@@ -400,12 +405,14 @@ server <- function(input, output, session) {
   })
   
   observeEvent(input$lvlOrderSorted, {
-    #update dataframes levels based on level order
     v$groupsDF[input$lvlOrderSelect] <- factor(v$groupsDF[[input$lvlOrderSelect]], levels = c(input$lvlOrderSorted))
+    
+    #update dataframes levels based on level order
     v$dataList_melted <- lapply(v$dataList_melted, function(df) {
       df[input$lvlOrderSelect] <- factor(df[[input$lvlOrderSelect]], levels=c(input$lvlOrderSorted))
       return(df)
     })
+
   })
 
 
@@ -420,7 +427,6 @@ server <- function(input, output, session) {
         "Minimal" = theme_minimal(base_size = input$size),
         "Gray" = theme_gray(base_size = input$size)
       )
-      
 
       
       df <- v$dataList_melted[[1]]
@@ -527,10 +533,6 @@ server <- function(input, output, session) {
 
   })
 
-  # observeEvent(input$lvlOrderSorted, {
-    # v$groups[input$lvlOrderSelect] <- factor(v$groups[input$lvlOrderSelect], levels=c(input$lvlOrderSorted))
-
-  # })
 
 }
 

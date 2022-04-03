@@ -1,7 +1,7 @@
 
 
 themes <- c("BW" , "Classic", "Light", "Minimal", "Gray")
-react <- c("conditions", "rawdata_list", "dataList", "groups", "groupsDF", "interactions", "names", "rawdata", "themes_map")
+react <- c("conditions", "rawdata_list", "dataList", "groups", "interactions", "rawdata", "themes_map")
 
 getFile <- function(datapath) {
   rawTableList <- list()
@@ -60,8 +60,6 @@ updateGroup <- function(groups, conditions, wells) {
   
   #Only add new columns if a non-existing condition has been entered
   groups[,setdiff(conditions, currentConds)] <- "NA"
-
-  
   return(groups)
 }
 
