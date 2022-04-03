@@ -95,11 +95,6 @@ dataMelter <- function(dataList, groups, timeRange) {
     colnames(subTable_melt)  <-  c("time", conditions, "value", "SE")
     return(subTable_melt)
   })
-  
-  
-  
-  
-
   return(dataList_melted)
 }
 
@@ -152,6 +147,32 @@ normalize <- function(df=NULL, method=NULL, baseOD=NULL) {
   }else if(method == 'No Normalisation') {
     return(data.frame(lapply(df, function(x) x=x)))
   }
+}
+
+
+
+
+getPalette <- function(x, customPalette=NULL) {
+  ps = list(
+    "Viridis" = viridis_pal(option = "viridis")(x),
+    "Magma" = viridis_pal(option = "magma")(x),
+    "Plasma" = viridis_pal(option = "plasma")(x),
+    "Cividis" = viridis_pal(option = "cividis")(x),
+    "Blues (8 max)" = brewer_pal(palette = "Blues")(ifelse(x>8,8,x)),
+    "Reds (8 max)" = brewer_pal(palette = "Reds")(ifelse(x>8,8,x)),
+    "Paired (8 max)" = brewer_pal(palette = "Paired")(ifelse(x>8,8,x)),
+    "Set1 (8 max)" = brewer_pal(palette = "Set1")(ifelse(x>8,8,x)),
+    "Set2 (8 max)" = brewer_pal(palette = "Set2")(ifelse(x>8,8,x)),
+    "Set3 (8 max)" = brewer_pal(palette = "Set3")(ifelse(x>8,8,x)),
+    "Dark2 (8 max)" = brewer_pal(palette = "Dark2")(ifelse(x>8,8,x)),
+    "Pastel (4 max)" = c( "#00798c","#66a182", "#edae49", "#d1495b")
+  )
+  
+  if(!is.null(customPalette)) {
+    return(c(list("Custom" = customPalette), ps))
+  }
+  
+  return(ps)
 }
 
 

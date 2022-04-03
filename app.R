@@ -22,6 +22,7 @@ library(RColorBrewer)
 library(shinyStore)
 library(xlsx)
 source('utility.R', local = TRUE)
+source('plot.R', local = TRUE)
 
 version <- "0.1"
 ##### UI #####
@@ -116,36 +117,6 @@ server <- function(input, output, session) {
   toListen2 <- reactive({
     list(input$norm,input$norm_baseOD, input$files)
   })
-  v$customP <- NULL
-  getPalette <- function(x, pal=NULL) {
-    ps = list(
-      "Viridis" = viridis_pal(option = "viridis")(x),
-      "Magma" = viridis_pal(option = "magma")(x),
-      "Plasma" = viridis_pal(option = "plasma")(x),
-      "Cividis" = viridis_pal(option = "cividis")(x),
-      "Blues (8 max)" = brewer_pal(palette = "Blues")(ifelse(x>8,8,x)),
-      "Reds (8 max)" = brewer_pal(palette = "Reds")(ifelse(x>8,8,x)),
-      "Paired (8 max)" = brewer_pal(palette = "Paired")(ifelse(x>8,8,x)),
-      "Set1 (8 max)" = brewer_pal(palette = "Set1")(ifelse(x>8,8,x)),
-      "Set2 (8 max)" = brewer_pal(palette = "Set2")(ifelse(x>8,8,x)),
-      "Set3 (8 max)" = brewer_pal(palette = "Set3")(ifelse(x>8,8,x)),
-      "Dark2 (8 max)" = brewer_pal(palette = "Dark2")(ifelse(x>8,8,x)),
-      "Pastel (4 max)" = c( "#00798c","#66a182", "#edae49", "#d1495b")
-    )
-    if(!is.null(isolate(v$customP))) {
-      ps <- c(
-        list(
-          "Custom" = isolate(v$customP)
-        ),
-        ps
-      )
-    }
-    if(is.null(pal)) {
-      return(ps)
-    }
-    
-    return(ps[[pal]])
-  }
   
   
   observeEvent(toListen2(), {
@@ -290,7 +261,7 @@ server <- function(input, output, session) {
                 )
               )
             ),
-            textInput('customColorPalette', 'Custom Color Palette:', value="", placeholder = "#4b123f, #cb13b2, ...")
+            textInput('customColorPalette', 'Custom Color Palette:', value=paste(input$localStorage$customP, collapse=","), placeholder = "#4b123f, #cb13b2, ...")
           ),
           splitLayout(
             numericInput('height', 'Height (Inches):', value=5, min = 4, max = 50, step = 1),
@@ -321,12 +292,14 @@ server <- function(input, output, session) {
       )
     })
   })
+
   
   observeEvent(input$customColorPalette, {
     vec <- gsub(" ", "", unlist(strsplit(input$customColorPalette, ",")))
     if(isHex(vec)) {
       v$customP <- vec
-      updatePalettePicker(inputId = "pal", choices = getPalette(8))
+      updateStore(session, name = "customP", value = v$customP)
+      updatePalettePicker(inputId = "pal", choices = getPalette(8, vec))
     }
   })
 
@@ -381,29 +354,45 @@ server <- function(input, output, session) {
         )
       )
     })
+    observeEvent(input$fw, {
+      #Only if facetWrap is select, and at least two different levels in that column
+      if(input$fw != "None" && length(isolate(levels(v$dataList_melted[["OD"]][[input$fw]]))) > 1){
+        output$refCurveUI <- renderUI({
+          list(
+            selectInput('referenceCurve', 'Reference Facet (copied on each facet):', choices = c("None", isolate(levels(v$dataList_melted[["OD"]][[input$fw]]))), width='100%')
+          )
+        })
+      }else {
+        output$refCurveUI <- NULL
+      }
+    })
     
-
+    
     
     ##### Log Scale UI #####
-    if(input$logScale) {
-      output$logScaleUI <- renderUI({
-        list(
-          sliderTextInput('yAxisRange', 'Y axis range:', selected =c(0.001, 1), choices = c(0.001, 0.01, 0.1, 1, 10), grid=T)
-        )
-      })
-    }else {
-      output$logScaleUI <- renderUI({
-        list(
-          sliderInput('yAxisRange', 'Y axis range:', min=0, step=0.1, max=ceiling(max(v$dataList_melted$OD$value)), value=c(0, ceiling(max(v$dataList_melted$OD$value))))
-        )
-      })
-    }
+    observeEvent(input$logScale, {
+      if(input$logScale) {
+        output$logScaleUI <- renderUI({
+          list(
+            sliderTextInput('yAxisRange', 'Y axis range:', selected =c(0.001, 1), choices = c(0.001, 0.01, 0.1, 1, 10), grid=T)
+          )
+        })
+      }else {
+        output$logScaleUI <- renderUI({
+          list(
+            sliderInput('yAxisRange', 'Y axis range:', min=0, step=0.1, max=ceiling(max(v$dataList_melted$OD$value)), value=c(0, ceiling(max(v$dataList_melted$OD$value))))
+          )
+        })
+      }
+    })
 
 
 
 
   })
   
+  
+  ##### lvl Order Sorter #####
   observeEvent(input$lvlOrderSorted, {
     v$groupsDF[input$lvlOrderSelect] <- factor(v$groupsDF[[input$lvlOrderSelect]], levels = c(input$lvlOrderSorted))
     
@@ -431,7 +420,6 @@ server <- function(input, output, session) {
       
       df <- v$dataList_melted[[1]]
       
-      
       if(!is.null(input$referenceCurve) && input$referenceCurve != "None") {
         df <- addReferenceCurve(input$referenceCurve, input$fw, df)
       }
@@ -445,89 +433,8 @@ server <- function(input, output, session) {
         df$Lower <- df$value-df$SE
         df$value <- df$value
       }
-      ##### OD Plot #####
-      p <- ggplot(data=df, aes_string(x="time", y="value"))
-
-
-      if(input$se == "Line Range") {
-        p <- p + geom_linerange(aes(ymin=Lower, ymax=Upper))
-
-      }else if(input$se == "Ribbon") {
-        p <- p + geom_ribbon(aes(ymin=Lower, ymax=Upper), alpha=0.2, colour=NA)
-      }
-      if(input$color != 'None') {
-
-        x <- nrow(unique(v$groups3[unlist(strsplit(input$color,", "))]))
-        p <- p + aes_string(col=paste0("interaction(", paste0(unlist(strsplit(input$color,", ")), collapse=", "),")"),
-                            fill=paste0("interaction(", paste0(unlist(strsplit(input$color,", ")), collapse=", "),")")) +
-          scale_color_manual(values=getPalette(x, input$pal), aesthetics = c("colour", "fill"), name=input$color)
-      }
-      if(input$linetype != "None") {
-        p <- p + aes_string(linetype=input$linetype) +
-          geom_line( size=input$size_l)
-      }else if(input$shape == "None") {
-        p <- p + geom_line(size=input$size_l)
-      }
-      if (input$fw != "None") {
-        if(!is.null(input$referenceCurve) && input$referenceCurve != "None") {
-          if(!is.null(v$RLU) && input$RLUplotSelector == 'Both OD & RLU') {
-            p <- p + facet_wrap(~facetRef, scales="free", nrow = 1)
-          }else {
-            p <- p + facet_wrap(~facetRef, scales="free")
-
-          }
-        }else {
-          if(!is.null(v$RLU) && input$RLUplotSelector == 'Both OD & RLU') {
-            p <- p + facet_wrap(as.formula(paste("~", paste0(unlist(strsplit(input$fw,", ")), collapse="+"))), scales="free", nrow = 1)
-          }else {
-            p <- p + facet_wrap(as.formula(paste("~", paste0(unlist(strsplit(input$fw,", ")), collapse="+"))), scales="free")
-
-          }
-        }
-      }
-
-      if(input$shape != "None") {
-        p <- p + aes_string(shape=input$shape) +
-          geom_point(size=input$size_p)
-      }
-      if(input$grouping != "None") {
-        p <- p +aes_string(group=paste0("interaction(", paste0(unlist(strsplit(input$grouping,", ")), collapse=", "),")"))
-      }
-      p <- p + v$themes_map[[input$theme]]
-      if(input$logScale) {
-        tmp = as.numeric(input$yAxisRange)
-        if(tmp[1] == 0) {
-          return()
-        }
-        p <-  p +
-          scale_y_continuous(limits=c(log10(tmp[1]), log10(tmp[2])), expand=c(0,0), breaks=seq(log10(tmp[1]), log10(tmp[2]), 1), labels=10^seq(log10(tmp[1]), log10(tmp[2]), 1)) +
-          annotation_logticks(sides = "l", size = input$size/25, colour="black", outside=T, mid=unit(0.3, "cm"), long=unit(0.4, "cm"), short=unit(0.2, "cm"))
-      }else {
-        tmp = round(as.numeric(input$yAxisRange), 1)
-        p <- p +
-          scale_y_continuous(limits=c(tmp[1], tmp[2]), expand=c(0, 0)) +
-          theme(axis.ticks = element_line(size=input$size/25),
-                axis.ticks.length = unit(0.3, "cm"))
-      }
-
-      p <-  p +
-        scale_x_continuous(expand=c(0,0), limits = input$range) +
-        theme(axis.text.y.left = element_text(margin=margin(t=0, r=10, b=0, l=0))) +
-        coord_cartesian(clip = "off") +
-        labs(
-          linetype=input$linetype,
-          shape=input$shape,
-          x ="Time [h]",
-          y = "Cell Density [OD 595nm]")
-      if(!is.null(input$customThemeUI) && nchar(input$customThemeUI) > 0) {
-        str = paste0("list(", input$customThemeUI, ")")
-        if(inherits(try(p + eval(parse(text=str)), silent=TRUE), "try-error")) {
-          showNotification(p + eval(parse(text=str)))
-        }else {
-          p <- p + eval(parse(text=str))
-        }
-      }
-      v$p <- p
+      ##### Plot #####
+      p <- makePlot(df, input, v$themes_map[[input$theme]], isolate(v$customP))
       return(p)
     }, width=reactive(input$width*72), height = reactive(input$height*72))
 
@@ -538,6 +445,5 @@ server <- function(input, output, session) {
 
 
 shinyApp(ui, server)
-
 
 
