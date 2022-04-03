@@ -1,4 +1,17 @@
-makePlot <- function(df, input, theme, customP) {
+makePlot <- function(df, input, customP, ylabel="RLU/OD", od = T) {
+  themes_map <- list(
+    "BW" = theme_bw(base_size = input$size),
+    "Classic" = theme_classic(base_size = input$size),
+    "Light" = theme_light(base_size = input$size),
+    "Minimal" = theme_minimal(base_size = input$size),
+    "Gray" = theme_gray(base_size = input$size)
+  )
+  
+  if(!is.null(input$referenceCurve) && input$referenceCurve != "None") {
+    df <- addReferenceCurve(input$referenceCurve, input$fw, df)
+  }
+
+  
   p <- ggplot(data=df, aes_string(x="time", y="value"))
   
   
@@ -26,9 +39,10 @@ makePlot <- function(df, input, theme, customP) {
   
   if (input$fw != "None") {
     if(!is.null(input$referenceCurve) && input$referenceCurve != "None") {
-      p <- p + facet_wrap(~facetRef, scales="free")
+      p <- p + facet_wrap(~facetRef, scales="free", nrow = input$nRowsFacets)
+      
     }else {
-      p <- p + facet_wrap(as.formula(paste("~", paste0(unlist(strsplit(input$fw,", ")), collapse="+"))), scales="free")
+      p <- p + facet_wrap(as.formula(paste("~", paste0(unlist(strsplit(input$fw,", ")), collapse="+"))), scales="free", nrow = input$nRowsFacets)
     }
   }
   
@@ -41,34 +55,49 @@ makePlot <- function(df, input, theme, customP) {
     p <- p +aes_string(group=paste0("interaction(", paste0(unlist(strsplit(input$grouping,", ")), collapse=", "),")"))
   }
   
-  p <- p + theme
+  p <- p + themes_map[[input$theme]]
 
   
-  if(input$logScale) {
-    tmp = as.numeric(input$yAxisRange)
-    if(!tmp[1]) {
-      return(NULL)
+  if(od) {
+    if(input$logScale) {
+      tmp = as.numeric(input$yAxisRange)
+      if(!tmp[1]) {
+        return(NULL)
+      }
+      p <-  p +
+        scale_y_continuous(limits=c(log10(tmp[1]), log10(tmp[2])), expand=c(0,0), breaks=seq(log10(tmp[1]), log10(tmp[2]), 1), labels=10^seq(log10(tmp[1]), log10(tmp[2]), 1)) +
+        annotation_logticks(sides = "l", size = input$size/25, colour="black", outside=T, mid=unit(0.3, "cm"), long=unit(0.4, "cm"), short=unit(0.2, "cm"))
+    }else {
+      tmp = round(as.numeric(input$yAxisRange), 1)
+      p <- p +
+        scale_y_continuous(limits=c(tmp[1], tmp[2]), expand=c(0, 0)) +
+        theme(axis.ticks = element_line(size=input$size/25),
+              axis.ticks.length = unit(0.3, "cm"))
     }
+    
     p <-  p +
-      scale_y_continuous(limits=c(log10(tmp[1]), log10(tmp[2])), expand=c(0,0), breaks=seq(log10(tmp[1]), log10(tmp[2]), 1), labels=10^seq(log10(tmp[1]), log10(tmp[2]), 1)) +
-      annotation_logticks(sides = "l", size = input$size/25, colour="black", outside=T, mid=unit(0.3, "cm"), long=unit(0.4, "cm"), short=unit(0.2, "cm"))
+      scale_x_continuous(expand=c(0,0), limits = input$range) +
+      theme(axis.text.y.left = element_text(margin=margin(t=0, r=10, b=0, l=0))) +
+      coord_cartesian(clip = "off") +
+      labs(
+        linetype=input$linetype,
+        shape=input$shape,
+        x ="Time [h]",
+        y = "Cell Density [OD 595nm]")
+    
   }else {
-    tmp = round(as.numeric(input$yAxisRange), 1)
-    p <- p +
-      scale_y_continuous(limits=c(tmp[1], tmp[2]), expand=c(0, 0)) +
-      theme(axis.ticks = element_line(size=input$size/25),
-            axis.ticks.length = unit(0.3, "cm"))
+    p <- p + 
+      scale_y_continuous(limits=c(0, max(df$value+df$SE)), expand=c(0, 0)) +
+      theme(axis.ticks = element_line(size=input$size/25), axis.ticks.length = unit(0.3, "cm")) +
+      scale_x_continuous(expand=c(0,0), limits = input$range) +
+      theme(axis.text.y.left = element_text(margin=margin(t=0, r=10, b=0, l=0))) +
+      coord_cartesian(clip = "off") +
+      labs(
+        x ="Time [h]",
+        y = ylabel) #to modify into given parameter from name of subtable (RLU/GFP...)
   }
   
-  p <-  p +
-    scale_x_continuous(expand=c(0,0), limits = input$range) +
-    theme(axis.text.y.left = element_text(margin=margin(t=0, r=10, b=0, l=0))) +
-    coord_cartesian(clip = "off") +
-    labs(
-      linetype=input$linetype,
-      shape=input$shape,
-      x ="Time [h]",
-      y = "Cell Density [OD 595nm]")
+  
   if(!is.null(input$customThemeUI) && nchar(input$customThemeUI) > 0) {
     str = paste0("list(", input$customThemeUI, ")")
     if(inherits(try(p + eval(parse(text=str)), silent=TRUE), "try-error")) {

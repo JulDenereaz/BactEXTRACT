@@ -239,10 +239,11 @@ server <- function(input, output, session) {
             ),
             column(
               width=12,
-              selectInput('plotSelector', 'Plot Selector:', choices=c(names(v$dataList)[-1], getInteractions(names(v$dataList)[-1])), width='100%'),
+              selectInput('secondaryPlot', 'Additional Plot:', choices=c("None", names(v$dataList)[-c(1,2)]), width='100%'),
+              uiOutput("comparisonMethod"),
               selectInput('se', 'Standart Error Style:', choices=c("None", "Line Range", "Ribbon"), width='100%'),
               
-              selectInput('lvlOrderSelect', "Order Levels :", choices = c(v$conditions), width='100%'),
+              selectInput('lvlOrderSelect', "Order Levels:", choices = c(v$conditions), width='100%'),
               uiOutput("levelOrderUI", width='100%')
             )
           ),          
@@ -291,6 +292,22 @@ server <- function(input, output, session) {
         )
       )
     })
+  })
+  
+  observeEvent(input$secondaryPlot, {
+    if(input$secondaryPlot != "None") {
+      output$comparisonMethod <- renderUI({
+        list(
+          splitLayout(
+            checkboxInput('secPlotMethod', paste(input$secondaryPlot, '/OD'), value = F, width='100%'),
+            checkboxInput('secPlotDisplay', 'Comparison', value = T, width='100%')
+            
+          )
+        )
+      })
+    }else {
+      output$comparisonMethod <- NULL
+    }
   })
 
   
@@ -359,7 +376,10 @@ server <- function(input, output, session) {
       if(input$fw != "None" && length(isolate(levels(v$dataList_melted[["OD"]][[input$fw]]))) > 1){
         output$refCurveUI <- renderUI({
           list(
-            selectInput('referenceCurve', 'Reference Facet (copied on each facet):', choices = c("None", isolate(levels(v$dataList_melted[["OD"]][[input$fw]]))), width='100%')
+            splitLayout(
+              selectInput('referenceCurve', 'Ref. Curve:', choices = c("None", isolate(levels(v$dataList_melted[["OD"]][[input$fw]]))), width='100%'),
+              numericInput('nRowsFacets', 'N. Rows:', value=1, min = 1, max = 10, step = 1)
+            )
           )
         })
       }else {
@@ -407,23 +427,13 @@ server <- function(input, output, session) {
 
   observeEvent(v$dataList_melted, {
     output$plot <- renderPlot({
-      req(input$yAxisRange)
       v$customP
-      v$themes_map <- list(
-        "BW" = theme_bw(base_size = input$size),
-        "Classic" = theme_classic(base_size = input$size),
-        "Light" = theme_light(base_size = input$size),
-        "Minimal" = theme_minimal(base_size = input$size),
-        "Gray" = theme_gray(base_size = input$size)
-      )
-
+      req(input$yAxisRange)
       
-      df <- v$dataList_melted[[1]]
       
-      if(!is.null(input$referenceCurve) && input$referenceCurve != "None") {
-        df <- addReferenceCurve(input$referenceCurve, input$fw, df)
-      }
-
+      ##### Plot #####
+      df <- v$dataList_melted[["OD"]]
+      
       if(input$logScale) {
         df$Upper <- log10(df$value+df$SE)
         df$Lower <- log10(df$value-df$SE)
@@ -433,9 +443,25 @@ server <- function(input, output, session) {
         df$Lower <- df$value-df$SE
         df$value <- df$value
       }
-      ##### Plot #####
-      p <- makePlot(df, input, v$themes_map[[input$theme]], isolate(v$customP))
-      return(p)
+      pOD <- makePlot(df, input, isolate(v$customP), od=T)
+      
+      
+      if(input$secondaryPlot != "None") {
+        dfSec <- v$dataList_melted[[input$secondaryPlot]]
+        text <- input$secondaryPlot
+        if(input$secPlotMethod) {
+          dfSec$value <- isolate(as.numeric(dfSec$value)/as.numeric(v$dataList_melted[["OD"]]$value))
+          text <- paste(text, "/OD")
+        }
+        pSec <- makePlot(dfSec, input, isolate(v$customP), text, od=F)
+        if(input$secPlotDisplay) {
+          pOD <- ggarrange(pOD, pSec, ncol = 1, nrow = 2, align = "v", common.legend = T, legend = "right")
+        }else {
+          return(pSec)
+        }
+      }
+      
+      return(pOD)
     }, width=reactive(input$width*72), height = reactive(input$height*72))
 
   })
