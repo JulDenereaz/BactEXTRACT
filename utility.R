@@ -193,6 +193,13 @@ getAUC <- function(timeCol, odCol, range) {
   return(sum(auc))  
 }
 
+
+
+
+
+
+
+
 isHex <- function(vector) {
   if(length(vector) == 0) {
     return(FALSE)

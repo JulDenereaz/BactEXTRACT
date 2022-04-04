@@ -20,11 +20,13 @@ library(sortable)
 library(shinythemes)
 library(RColorBrewer)
 library(shinyStore)
-library(xlsx)
+library(shinyBS)
 source('utility.R', local = TRUE)
 source('plot.R', local = TRUE)
 
 version <- "0.1"
+
+
 ##### UI #####
 ui = dashboardPage(
   dashboardHeader(title = "TECAN Extractor"),
@@ -32,6 +34,7 @@ ui = dashboardPage(
     fileInput("files", "Choose TECAN Excel File",
               multiple = TRUE,
               accept = c(".xlsx", ".txt")),
+    
     initStore("localStorage", "BactEXTRACT_storage"),
     
     div(style="height:calc(100vh - 250px);",
@@ -66,13 +69,18 @@ ui = dashboardPage(
           height='calc(calc(100vh - 140px)/2)',
           tabPanel(
             'Settings', 
-              div(style = 'overflow-y:auto;height:calc(calc(100vh - 260px)/2)', 
+            div(style = 'overflow-y:auto;height:calc(calc(100vh - 260px)/2)', 
                 uiOutput("graph_options")
-              )
+            )
           ),
           tabPanel(
             'Downloads',
             uiOutput("downloads"),
+            
+          ),
+          tabPanel(
+            'Uploads',
+            uiOutput("uploads"),
             
           )
         )
@@ -111,6 +119,10 @@ ui = dashboardPage(
 
 
 
+
+
+
+
 ##### Server function #####
 server <- function(input, output, session) {
   v <- reactiveValues()
@@ -139,6 +151,7 @@ server <- function(input, output, session) {
           uiOutput('error_condition'),
           column(12, align="center", p('(Cannot start with number, separated by coma)')),     
           column(12, align="center", actionButton('updateCond', 'Update'))
+          # bsTooltip("conditionsUI_Input", "Tooltip works", placement = "bottom", trigger = "hover", options = NULL)
         )
       )
     })
@@ -154,14 +167,14 @@ server <- function(input, output, session) {
     
     tryCatch({
       rawdata_file_list <- do.call(list, lapply(input$files$datapath, function(file) {
-          obj <- getFile(file)
-          return(obj)
-        }))
-        names(rawdata_file_list) <- input$files$name
-      },
-        error = function(e) {
-          stop(safeError(e))
-      }
+        obj <- getFile(file)
+        return(obj)
+      }))
+      names(rawdata_file_list) <- input$files$name
+    },
+    error = function(e) {
+      stop(safeError(e))
+    }
     )
     v$rawdata_list <- list()
     #rawdata_list contains the merged files sub-tables, time column in first, followed by any additional OD/luminescence/RLU etc.. tables
@@ -181,7 +194,7 @@ server <- function(input, output, session) {
     names(v$rawdata_list)[2] <- "OD"
     
   })
-
+  
   ##### Update button Panel #####
   observeEvent(input$updateCond, {
     req(input$conditionsUI_Input)
@@ -309,7 +322,7 @@ server <- function(input, output, session) {
       output$comparisonMethod <- NULL
     }
   })
-
+  
   
   observeEvent(input$customColorPalette, {
     vec <- gsub(" ", "", unlist(strsplit(input$customColorPalette, ",")))
@@ -319,12 +332,12 @@ server <- function(input, output, session) {
       updatePalettePicker(inputId = "pal", choices = getPalette(8, vec))
     }
   })
-
+  
   ##### Groups #####
   observeEvent(input$groups, {
     #This is called everytime the input$groups table gets modified by the user
     req(input$groups)
-
+    
     v$groupsDF <- data.frame(hot_to_r(input$groups))
     v$groupsDF[-c(1,2,3)] <- lapply(v$groupsDF[-c(1,2,3)], factor)
     v$dataList_melted <- dataMelter(v$dataList, v$groupsDF, input$range)
@@ -332,7 +345,7 @@ server <- function(input, output, session) {
       return()
     }
     
-
+    
     
     ##### Downloads UI #####
     output$downloads <- renderUI({
@@ -359,6 +372,21 @@ server <- function(input, output, session) {
         write.csv(v$dataList_melted, file, row.names = FALSE)
       }
     )
+    output$downloadpdf <- downloadHandler(
+      filename = function(){paste(input$title,'.pdf', sep='')},
+      content = function(file){
+        ggsave(file,plot=v$p, width=input$width, height=input$height, units="in", dpi=300, device=cairo_pdf)
+      }
+    )    
+    output$downloadeps <- downloadHandler(
+      filename = function(){paste(input$title,'.eps', sep='')},
+      content = function(file){
+        ggsave(file,plot=v$p, width=input$width, height=input$height, units="in", dpi=300, device=cairo_ps)
+      }
+    )
+    
+    
+    
     ##### LevelOrder UI #####
     output$levelOrderUI <- renderUI({
       list(
@@ -405,10 +433,10 @@ server <- function(input, output, session) {
         })
       }
     })
-
-
-
-
+    
+    
+    
+    
   })
   
   
@@ -421,17 +449,17 @@ server <- function(input, output, session) {
       df[input$lvlOrderSelect] <- factor(df[[input$lvlOrderSelect]], levels=c(input$lvlOrderSorted))
       return(df)
     })
-
+    
   })
-
-
+  
+  
+  ##### Plot #####
   observeEvent(v$dataList_melted, {
     output$plot <- renderPlot({
       v$customP
       req(input$yAxisRange)
       
       
-      ##### Plot #####
       df <- v$dataList_melted[["OD"]]
       
       if(input$logScale) {
@@ -457,17 +485,89 @@ server <- function(input, output, session) {
         if(input$secPlotDisplay) {
           pOD <- ggarrange(pOD, pSec, ncol = 1, nrow = 2, align = "v", common.legend = T, legend = "right")
         }else {
+          
+          v$p <- pSec
           return(pSec)
         }
       }
       
+      v$p <- pOD
       return(pOD)
     }, width=reactive(input$width*72), height = reactive(input$height*72))
-
+    
   })
-
-
+  
+  toListen <- reactive({
+    list(v$data, v$groups3, input$auc_window)
+  })
+  
+  
+  
+  
+  
+  ##### AUC #####
+  
+  observeEvent(toListen(), {
+    
+    
+    
+    #   req(v$data, v$groups3, input$auc_window)
+    #   
+    #   #Calculate AUC of each well, based on the window size defined by the user, cbind to existing groups with condition
+    #   v$aucs <- cbind(data.frame(do.call(rbind, lapply(v$groups3$Wells, function(well) {
+    #     return(c(well, getAUC(v$data$time, v$data[[well]], input$auc_window)))
+    #   }))), v$groups3[v$conditions])
+    #   colnames(v$aucs) <- c("Well", "AUC", v$conditions)
+    #   #only one parameter for now
+    #   v$aucs$AUC <- as.numeric(v$aucs$AUC)
+    #   
+    #   
+    #   
+    #   
+    #   
+    #   output$bar_graph <- renderPlot({
+    #     req(v$aucs)
+    #     v$themes_map <- list(
+    #       "BW" = theme_bw(base_size = input$size),      
+    #       "Classic" = theme_classic(base_size = input$size),
+    #       "Light" = theme_light(base_size = input$size),
+    #       "Minimal" = theme_minimal(base_size = input$size),
+    #       "Gray" = theme_gray(base_size = input$size)
+    #     )
+    #     p_bar <- ggplot(v$aucs, aes_string(y="AUC", x=input$x_scale))
+    #     if(input$x_fill != 'None') {
+    #       x <- nrow(unique(v$groups3[unlist(strsplit(input$x_fill,", "))]))
+    #       p_bar <- p_bar + aes_string(col=paste0("interaction(", paste0(unlist(strsplit(input$x_fill,", ")), collapse=", "),")"),
+    #                                   fill=paste0("interaction(", paste0(unlist(strsplit(input$x_fill,", ")), collapse=", "),")")) + 
+    #         scale_color_manual(values=getPalette(x, input$pal), aesthetics = c("colour", "fill"), name=input$x_fill)
+    #     }
+    #     
+    #     if (input$x_facet_wrap != "None") {
+    #       p_bar <- p_bar + facet_wrap(as.formula(paste("~", paste0(unlist(strsplit(input$x_facet_wrap,", ")), collapse="+"))), scales="free")
+    #     }
+    #     p_bar <- p_bar +
+    #       stat_summary(geom="bar", fun = mean, position = "dodge", alpha = 0.3) +
+    #       stat_summary(geom="errorbar", fun.data = mean_se, width = 0.3, position=position_dodge(0.9), colour="black") +
+    #       geom_point(pch=21, position=position_jitterdodge(dodge.width=0.9), col="black", size=input$size_p) +
+    #       scale_y_continuous(expand = c(0,0), limits = c(0,1.03*max(v$aucs$AUC))) +
+    #       ggtitle(names(v$params)[match(input$parameter, v$params)]) +
+    #       v$themes_map[[input$theme]] +
+    #       theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+    #       ylab(paste('AUC [', input$auc_window[1], 'h - ', input$auc_window[2], 'h]', sep=""))
+    #     v$p_bar <- p_bar
+    #     return(p_bar)
+    #   },  width=reactive(input$width*72), height = reactive(input$height*72))
+  })
+  
 }
+
+
+
+
+
+
+
+
 
 
 shinyApp(ui, server)
