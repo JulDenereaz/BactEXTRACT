@@ -20,7 +20,6 @@ library(sortable)
 library(shinythemes)
 library(RColorBrewer)
 library(shinyStore)
-library(xlsx)
 source('utility.R', local = TRUE)
 source('plot.R', local = TRUE)
 
@@ -73,6 +72,11 @@ ui = dashboardPage(
           tabPanel(
             'Downloads',
             uiOutput("downloads"),
+            
+          ),
+          tabPanel(
+            'Uploads',
+            uiOutput("uploads"),
             
           )
         )
@@ -359,6 +363,21 @@ server <- function(input, output, session) {
         write.csv(v$dataList_melted, file, row.names = FALSE)
       }
     )
+    output$downloadpdf <- downloadHandler(
+      filename = function(){paste(input$title,'.pdf', sep='')},
+      content = function(file){
+        ggsave(file,plot=v$p, width=input$width, height=input$height, units="in", dpi=300, device=cairo_pdf)
+      }
+    )    
+    output$downloadeps <- downloadHandler(
+      filename = function(){paste(input$title,'.eps', sep='')},
+      content = function(file){
+        ggsave(file,plot=v$p, width=input$width, height=input$height, units="in", dpi=300, device=cairo_ps)
+      }
+    )
+    
+    
+    
     ##### LevelOrder UI #####
     output$levelOrderUI <- renderUI({
       list(
@@ -425,13 +444,13 @@ server <- function(input, output, session) {
   })
 
 
+  ##### Plot #####
   observeEvent(v$dataList_melted, {
     output$plot <- renderPlot({
       v$customP
       req(input$yAxisRange)
       
       
-      ##### Plot #####
       df <- v$dataList_melted[["OD"]]
       
       if(input$logScale) {
@@ -457,10 +476,13 @@ server <- function(input, output, session) {
         if(input$secPlotDisplay) {
           pOD <- ggarrange(pOD, pSec, ncol = 1, nrow = 2, align = "v", common.legend = T, legend = "right")
         }else {
+          
+          v$p <- pSec
           return(pSec)
         }
       }
       
+      v$p <- pOD
       return(pOD)
     }, width=reactive(input$width*72), height = reactive(input$height*72))
 
