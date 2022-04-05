@@ -451,8 +451,6 @@ server <- function(input, output, session) {
     })
     
   })
-  
-  
   ##### Plot #####
   observeEvent(v$dataList_melted, {
     output$plot <- renderPlot({
