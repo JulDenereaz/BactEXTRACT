@@ -64,7 +64,7 @@ updateGroup <- function(groups, conditions, wells) {
 }
 
 
-dataMelter <- function(dataList, groups, timeRange) {
+dataMelter <- function(dataList, groups, time) {
   
 
   groups <- groups[groups$KeepWell == "Yes",]
@@ -78,12 +78,12 @@ dataMelter <- function(dataList, groups, timeRange) {
   conditions <- names(groups)[-c(1,2,3)]
 
   #looping over each subTable, skipping the time vector
-  dataList_melted <- lapply(dataList[-1], function(subTable) {
+  dataList_melted <- lapply(dataList, function(subTable) {
     
     #subset only selected wells with KeepWell
     subTable <-  subTable[which(names(subTable) %in% c(groups$Wells))]
-    subTable <- subTable[which(dataList$time >= timeRange[1] & dataList$time <= timeRange[2]),]
-    subTable_melt = melt(cbind(data.frame(time = dataList$time), subTable), id=c('time'))
+    # subTable <- subTable[which(time >= timeRange[1] & time <= timeRange[2]),]
+    subTable_melt = melt(cbind(data.frame(time = time), subTable), id=c('time'))
     ind <- as.vector(match(subTable_melt$variable, groups$Wells))
     lapply(conditions, function(cond) {
       subTable_melt[cond] <<-  as.factor(as.vector(groups[,cond])[ind])
@@ -98,6 +98,18 @@ dataMelter <- function(dataList, groups, timeRange) {
   return(dataList_melted)
 }
 
+
+
+getTheme <- function(theme, size) {
+  themes_map <- list(
+    "BW" = theme_bw(base_size = size),
+    "Classic" = theme_classic(base_size = size),
+    "Light" = theme_light(base_size = size),
+    "Minimal" = theme_minimal(base_size = size),
+    "Gray" = theme_gray(base_size = size)
+  )
+  return(themes_map[[theme]])
+}
 
 
 getInteractions <- function(cond) {

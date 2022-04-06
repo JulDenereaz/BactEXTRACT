@@ -1,11 +1,5 @@
 makePlot <- function(df, input, customP, ylabel="RLU/OD", od = T) {
-  themes_map <- list(
-    "BW" = theme_bw(base_size = input$size),
-    "Classic" = theme_classic(base_size = input$size),
-    "Light" = theme_light(base_size = input$size),
-    "Minimal" = theme_minimal(base_size = input$size),
-    "Gray" = theme_gray(base_size = input$size)
-  )
+
   
   if(!is.null(input$referenceCurve) && input$referenceCurve != "None") {
     df <- addReferenceCurve(input$referenceCurve, input$fw, df)
@@ -55,7 +49,7 @@ makePlot <- function(df, input, customP, ylabel="RLU/OD", od = T) {
     p <- p +aes_string(group=paste0("interaction(", paste0(unlist(strsplit(input$grouping,", ")), collapse=", "),")"))
   }
   
-  p <- p + themes_map[[input$theme]]
+  p <- p + getTheme(input$theme, input$size)
 
   
   if(od) {

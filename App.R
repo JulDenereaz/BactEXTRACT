@@ -29,7 +29,7 @@ version <- "0.1"
 
 ##### UI #####
 ui = dashboardPage(
-  dashboardHeader(title = "TECAN Extractor"),
+  dashboardHeader(title = "BactEXTRACT"),
   dashboardSidebar(
     fileInput("files", "Choose TECAN Excel File",
               multiple = TRUE,
@@ -99,7 +99,7 @@ ui = dashboardPage(
             'AUC Plot',
             column(
               width=2,
-              uiOutput("gro_opt")
+              uiOutput("AUC_ui")
             ),
             
             column(
@@ -178,20 +178,18 @@ server <- function(input, output, session) {
     )
     v$rawdata_list <- list()
     #rawdata_list contains the merged files sub-tables, time column in first, followed by any additional OD/luminescence/RLU etc.. tables
-    if(length(input$files$name) == 1) {
-      v$rawdata_list <- rawdata_file_list[[1]]
-    }else {
-      v$rawdata_list$time <- rawdata_file_list[[1]][[1]]
-      for (i in names(rawdata_file_list[[1]])[-1]) {
-        v$rawdata_list[[i]] <- do.call(cbind, lapply(isolate(input$files$name), function(filename) {
-          df <- isolate(rawdata_file_list[[filename]][[i]])
+    v$timeScale <- rawdata_file_list[[1]]$time
+    for (i in names(rawdata_file_list[[1]])[-1]) {
+      v$rawdata_list[[i]] <- do.call(cbind, lapply(isolate(input$files$name), function(filename) {
+        df <- isolate(rawdata_file_list[[filename]][[i]])
+        if(length(input$files$name) > 1) {
           colnames(df) <- paste(tools::file_path_sans_ext(filename), colnames(df), sep="_")
-          return(df)
-        }))
-      }
+        }
+        return(df)
+      }))
     }
     #Changing the name of the standard OD to OD. The rest will stay custom, as it can be RLU/Luminescence etc...
-    names(v$rawdata_list)[2] <- "OD"
+    names(v$rawdata_list)[1] <- "OD" 
     
   })
   
@@ -208,6 +206,7 @@ server <- function(input, output, session) {
       v$groups[colnames(data.frame(hot_to_r(input$groups)))] <- data.frame(hot_to_r(input$groups))
     }
     
+    #add localstorage for groups, if same number of rows
     v$groups <- updateGroup(isolate(v$groups), v$conditions, colnames(v$rawdata_list$OD))
     
     v$interactions <- getInteractions(v$conditions)
@@ -243,7 +242,7 @@ server <- function(input, output, session) {
           splitLayout(
             column(
               width=12,
-              selectInput('color', 'Color:', choices=c("None", v$conditions, v$interactions), width='100%'),
+              selectInput('color', 'Color:', choices=c("None", v$conditions, v$interactions), selected = v$conditions[1], width='100%'),
               selectInput('linetype', 'Linetype:', choices=c("None", v$conditions), width='100%'),
               selectInput('shape', 'Shape:', choices=c("None", v$conditions), width='100%'),
               selectInput('grouping', 'Grouping:', choices=c("None", v$interactions), width='100%'),
@@ -252,7 +251,7 @@ server <- function(input, output, session) {
             ),
             column(
               width=12,
-              selectInput('secondaryPlot', 'Additional Plot:', choices=c("None", names(v$dataList)[-c(1,2)]), width='100%'),
+              selectInput('secondaryPlot', 'Additional Plot:', choices=c("None", names(v$dataList)[-1]), width='100%'),
               uiOutput("comparisonMethod"),
               selectInput('se', 'Standart Error Style:', choices=c("None", "Line Range", "Ribbon"), width='100%'),
               
@@ -275,7 +274,7 @@ server <- function(input, output, session) {
                 )
               )
             ),
-            textInput('customColorPalette', 'Custom Color Palette:', value=paste(input$localStorage$customP, collapse=","), placeholder = "#4b123f, #cb13b2, ...")
+            textInput('customColorPalette', 'Custom Color Palette:', value=isolate(paste(input$localStorage$customP, collapse=",")), placeholder = "#4b123f, #cb13b2, ...")
           ),
           splitLayout(
             numericInput('height', 'Height (Inches):', value=5, min = 4, max = 50, step = 1),
@@ -284,7 +283,7 @@ server <- function(input, output, session) {
             
           ),
           splitLayout(
-            sliderInput('range', 'X axis range:', min=0, step=0.5, max=ceiling(max(v$dataList$time)), value=c(0, ceiling(max(v$dataList$time)))),
+            sliderInput('range', 'X axis range:', min=0, step=0.5, max=ceiling(max(v$timeScale)), value=c(0, ceiling(max(v$timeScale)))),
             uiOutput("logScaleUI")
             
           ),
@@ -326,6 +325,7 @@ server <- function(input, output, session) {
   
   observeEvent(input$customColorPalette, {
     vec <- gsub(" ", "", unlist(strsplit(input$customColorPalette, ",")))
+    
     if(isHex(vec)) {
       v$customP <- vec
       updateStore(session, name = "customP", value = v$customP)
@@ -340,11 +340,10 @@ server <- function(input, output, session) {
     
     v$groupsDF <- data.frame(hot_to_r(input$groups))
     v$groupsDF[-c(1,2,3)] <- lapply(v$groupsDF[-c(1,2,3)], factor)
-    v$dataList_melted <- dataMelter(v$dataList, v$groupsDF, input$range)
+    v$dataList_melted <- dataMelter(v$dataList, v$groupsDF, v$timeScale)
     if(is.null(v$dataList_melted)) {
       return()
     }
-    
     
     
     ##### Downloads UI #####
@@ -434,7 +433,18 @@ server <- function(input, output, session) {
       }
     })
     
-    
+    ##### AUC UI #####
+    output$AUC_ui <- renderUI({
+      fluidPage(
+        list(
+          sliderInput('auc_window', 'Window range AUC [h]:', min=0, step=0.5, max=ceiling(max(v$timeScale)), value=c(0, ifelse(ceiling(max(v$timeScale)) > 6, 6, floor(max(v$timeScale))))),
+          selectInput('auc_selector', 'Plot to display:', choices = names(v$dataList), width='100%'),
+          selectInput('auc_x_scale', 'X axis group:', choices=v$conditions, width='100%'),
+          selectInput('auc_y_scale', 'Y axis group:', choices=v$conditions, width='100%')
+        )
+      )
+    })
+
     
     
   })
@@ -493,68 +503,56 @@ server <- function(input, output, session) {
       return(pOD)
     }, width=reactive(input$width*72), height = reactive(input$height*72))
     
+    
+    
   })
   
-  toListen <- reactive({
-    list(v$data, v$groups3, input$auc_window)
+  toListenAUC <- reactive({
+    list(v$groupsDF, input$auc_selector)
   })
   
-  
-  
-  
-  
+
   ##### AUC #####
   
-  observeEvent(toListen(), {
+  observeEvent(toListenAUC(), {
+    req(input$auc_selector)
+    v$auc_list <- lapply(v$dataList, function(subTable) {
+      sub <- cbind(data.frame(do.call(rbind, lapply(v$groupsDF$Wells, function(well) {
+          return(data.frame(Well=well, AUC=as.numeric(getAUC(v$timeScale, subTable[[well]], input$auc_window))))
+        }))), v$groupsDF[v$conditions])
+      return(sub)
+    })
+    
+    df <- v$auc_list[[input$auc_selector]]
     
     
-    
-    #   req(v$data, v$groups3, input$auc_window)
-    #   
-    #   #Calculate AUC of each well, based on the window size defined by the user, cbind to existing groups with condition
-    #   v$aucs <- cbind(data.frame(do.call(rbind, lapply(v$groups3$Wells, function(well) {
-    #     return(c(well, getAUC(v$data$time, v$data[[well]], input$auc_window)))
-    #   }))), v$groups3[v$conditions])
-    #   colnames(v$aucs) <- c("Well", "AUC", v$conditions)
-    #   #only one parameter for now
-    #   v$aucs$AUC <- as.numeric(v$aucs$AUC)
-    #   
-    #   
-    #   
-    #   
-    #   
-    #   output$bar_graph <- renderPlot({
-    #     req(v$aucs)
-    #     v$themes_map <- list(
-    #       "BW" = theme_bw(base_size = input$size),      
-    #       "Classic" = theme_classic(base_size = input$size),
-    #       "Light" = theme_light(base_size = input$size),
-    #       "Minimal" = theme_minimal(base_size = input$size),
-    #       "Gray" = theme_gray(base_size = input$size)
-    #     )
-    #     p_bar <- ggplot(v$aucs, aes_string(y="AUC", x=input$x_scale))
-    #     if(input$x_fill != 'None') {
-    #       x <- nrow(unique(v$groups3[unlist(strsplit(input$x_fill,", "))]))
-    #       p_bar <- p_bar + aes_string(col=paste0("interaction(", paste0(unlist(strsplit(input$x_fill,", ")), collapse=", "),")"),
-    #                                   fill=paste0("interaction(", paste0(unlist(strsplit(input$x_fill,", ")), collapse=", "),")")) + 
-    #         scale_color_manual(values=getPalette(x, input$pal), aesthetics = c("colour", "fill"), name=input$x_fill)
-    #     }
-    #     
-    #     if (input$x_facet_wrap != "None") {
-    #       p_bar <- p_bar + facet_wrap(as.formula(paste("~", paste0(unlist(strsplit(input$x_facet_wrap,", ")), collapse="+"))), scales="free")
-    #     }
-    #     p_bar <- p_bar +
-    #       stat_summary(geom="bar", fun = mean, position = "dodge", alpha = 0.3) +
-    #       stat_summary(geom="errorbar", fun.data = mean_se, width = 0.3, position=position_dodge(0.9), colour="black") +
-    #       geom_point(pch=21, position=position_jitterdodge(dodge.width=0.9), col="black", size=input$size_p) +
-    #       scale_y_continuous(expand = c(0,0), limits = c(0,1.03*max(v$aucs$AUC))) +
-    #       ggtitle(names(v$params)[match(input$parameter, v$params)]) +
-    #       v$themes_map[[input$theme]] +
-    #       theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
-    #       ylab(paste('AUC [', input$auc_window[1], 'h - ', input$auc_window[2], 'h]', sep=""))
-    #     v$p_bar <- p_bar
-    #     return(p_bar)
-    #   },  width=reactive(input$width*72), height = reactive(input$height*72))
+    output$bar_graph <- renderPlot({
+      p_bar <- ggplot(df, aes_string(y="AUC", x=input$auc_x_scale))
+      if(input$color != 'None') {
+        x <- nrow(unique(df[unlist(strsplit(input$color,", "))]))
+        p_bar <- p_bar + aes_string(col=paste0("interaction(", paste0(unlist(strsplit(input$color,", ")), collapse=", "),")"),
+                            fill=paste0("interaction(", paste0(unlist(strsplit(input$color,", ")), collapse=", "),")")) +
+          scale_color_manual(values=getPalette(x, v$customP)[[input$pal]], aesthetics = c("colour", "fill"), name=input$color)
+      }else {
+        
+      }
+
+      if (input$fw != "None") {
+        p_bar <- p_bar + facet_wrap(as.formula(paste("~", paste0(unlist(strsplit(input$fw,", ")), collapse="+"))), scales="free", nrow = input$nRowsFacets)
+      }
+      
+      p_bar <- p_bar +
+        stat_summary(geom="bar", fun = mean, position = "dodge", alpha = 0.3) +
+        stat_summary(geom="errorbar", fun.data = mean_se, width = 0.3, position=position_dodge(0.9), colour="black") +
+        geom_point(pch=21, position=position_jitterdodge(dodge.width=0.9), col="black", size=input$size_p) +
+        scale_y_continuous(expand = c(0,0), limits = c(0,1.03*max(df$AUC))) +
+        # ggtitle(names(v$params)[match(input$parameter, v$params)]) +
+        getTheme(input$theme, input$size) +
+        theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+        ylab(paste('AUC [', input$auc_window[1], 'h - ', input$auc_window[2], 'h]', sep=""))
+      v$p_bar <- p_bar
+      return(p_bar)
+    },  width=reactive(input$width*72), height = reactive(input$height*72))
   })
   
 }
