@@ -110,6 +110,18 @@ ui = dashboardPage(
               width=5,
               plotOutput('tile_graph')
             )
+          ),
+          tabPanel(
+            'GrowthCurver', 
+            column(
+              width=2,
+              uiOutput('growthcurverUI')
+            ),
+            
+            column(
+              width=5,
+              plotOutput('growthcurverPlotUI')              
+            )
           )
         )
       )
@@ -131,11 +143,11 @@ server <- function(input, output, session) {
   })
   
   
-  observeEvent(toListen2(), {
-    req(v$rawdata)
-    #Called when normalization input is modified, or when new files is uploaded
-    v$df[2:ncol(v$df)] = normalize(isolate(v$rawdata), isolate(input$norm), isolate(input$norm_baseOD))
-  })
+  # observeEvent(toListen2(), {
+  #   req(v$rawdata)
+  #   #Called when normalization input is modified, or when new files is uploaded
+  #   v$df[2:ncol(v$df)] = normalize(isolate(v$rawdata), isolate(input$norm), isolate(input$norm_baseOD))
+  # })
   
   observeEvent(input$files, {
     req(input$files)
@@ -177,9 +189,10 @@ server <- function(input, output, session) {
     }
     )
     v$rawdata_list <- list()
-    #rawdata_list contains the merged files sub-tables, time column in first, followed by any additional OD/luminescence/RLU etc.. tables
+    #rawdata_list contains the merged files sub-tables, OD first, then followed by any additional luminescence/RLU etc.. tables
     v$timeScale <- rawdata_file_list[[1]]$time
-    for (i in names(rawdata_file_list[[1]])[-1]) {
+    v$subTableNames <- names(rawdata_file_list[[1]])[-1]
+    for (i in v$subTableNames) {
       v$rawdata_list[[i]] <- do.call(cbind, lapply(isolate(input$files$name), function(filename) {
         df <- isolate(rawdata_file_list[[filename]][[i]])
         if(length(input$files$name) > 1) {
@@ -189,7 +202,6 @@ server <- function(input, output, session) {
       }))
     }
     #Changing the name of the standard OD to OD. The rest will stay custom, as it can be RLU/Luminescence etc...
-    names(v$rawdata_list)[1] <- "OD" 
     
   })
   
@@ -207,24 +219,23 @@ server <- function(input, output, session) {
     }
     
     #add localstorage for groups, if same number of rows
-    v$groups <- updateGroup(isolate(v$groups), v$conditions, colnames(v$rawdata_list$OD))
+    v$groups <- updateGroup(isolate(v$groups), v$conditions, colnames(v$rawdata_list[[1]]))
     
     v$interactions <- getInteractions(v$conditions)
     
     #normalization
     v$dataList <- isolate(v$rawdata_list)
-    v$dataList$OD = normalize(isolate(v$dataList$OD), input$norm, input$norm_baseOD)
+    v$dataList[[1]] = normalize(isolate(v$dataList[[1]]), input$norm, input$norm_baseOD)
     updateStore(session, name = "cond", value = v$conditions)
     
-    
     #SapLine to preview the growth curve of each well
-    v$groups$Preview <- apply(v$dataList$OD, 2, function(x) jsonlite::toJSON(list(values=as.vector(x), options=list(type="line", spotRadius=0, chartRangeMin=0, chartRangeMax=1))))
+    v$groups$Preview <- apply(v$dataList[[1]], 2, function(x) jsonlite::toJSON(list(values=as.vector(replace(x, is.na(x), 0)), options=list(type="line", spotRadius=0, chartRangeMin=0, chartRangeMax=1))))
     output$groups <- renderRHandsontable({
       req(v$groups)
       rhandsontable(
         data.frame(v$groups), 
         fillHandle = list(direction='vertical', autoInsertRow=FALSE),
-        maxRows = ncol(isolate(v$dataList$OD)),
+        maxRows = ncol(isolate(v$dataList[[1]])),
         useTypes=T) %>%
         hot_col(col="Wells", readOnly = T, allowRowEdit =F, allowColEdit = F) %>%
         hot_col(col="KeepWell", type="dropdown", source=c("Yes", "No"), strict=T, allowInvalid=F, valign='htCenter') %>%
@@ -251,7 +262,7 @@ server <- function(input, output, session) {
             ),
             column(
               width=12,
-              selectInput('secondaryPlot', 'Additional Plot:', choices=c("None", names(v$dataList)[-1]), width='100%'),
+              selectInput('plot_selector', 'Plot to display:', choices = names(v$dataList), width='100%'),
               uiOutput("comparisonMethod"),
               selectInput('se', 'Standart Error Style:', choices=c("None", "Line Range", "Ribbon"), width='100%'),
               
@@ -306,13 +317,13 @@ server <- function(input, output, session) {
     })
   })
   
-  observeEvent(input$secondaryPlot, {
-    if(input$secondaryPlot != "None") {
+  observeEvent(input$plot_selector, {
+    if(input$plot_selector != v$subTableNames[1]) {
       output$comparisonMethod <- renderUI({
         list(
           splitLayout(
-            checkboxInput('secPlotMethod', paste(input$secondaryPlot, '/OD'), value = F, width='100%'),
-            checkboxInput('secPlotDisplay', 'Comparison', value = T, width='100%')
+            checkboxInput('secPlotMethod', paste(input$plot_selector, '/', v$subTableNames[1]), value = F, width='100%'),
+            checkboxInput('secPlotDisplay', paste0('Dual plots with ', v$subTableNames[[1]]), value = F, width='100%')
             
           )
         )
@@ -344,7 +355,6 @@ server <- function(input, output, session) {
     if(is.null(v$dataList_melted)) {
       return()
     }
-    
     
     ##### Downloads UI #####
     output$downloads <- renderUI({
@@ -400,11 +410,11 @@ server <- function(input, output, session) {
     })
     observeEvent(input$fw, {
       #Only if facetWrap is select, and at least two different levels in that column
-      if(input$fw != "None" && length(isolate(levels(v$dataList_melted[["OD"]][[input$fw]]))) > 1){
+      if(input$fw != "None" && length(isolate(levels(v$groupsDF[[input$fw]]))) > 1){
         output$refCurveUI <- renderUI({
           list(
             splitLayout(
-              selectInput('referenceCurve', 'Ref. Curve:', choices = c("None", isolate(levels(v$dataList_melted[["OD"]][[input$fw]]))), width='100%'),
+              selectInput('referenceCurve', 'Ref. Curve:', choices = c("None", isolate(levels(v$groupsDF[[input$fw]]))), width='100%'),
               numericInput('nRowsFacets', 'N. Rows:', value=1, min = 1, max = 10, step = 1)
             )
           )
@@ -414,20 +424,18 @@ server <- function(input, output, session) {
       }
     })
     
-    
-    
     ##### Log Scale UI #####
     observeEvent(input$logScale, {
       if(input$logScale) {
         output$logScaleUI <- renderUI({
           list(
-            sliderTextInput('yAxisRange', 'Y axis range:', selected =c(0.001, 1), choices = c(0.001, 0.01, 0.1, 1, 10), grid=T)
+            sliderTextInput('yAxisRange', 'Y axis range:', choices = c(0.001, 0.01, 0.1, 1, 10), selected =c(0.001, ifelse(2 > 1, 10, 1)),  grid=T)
           )
         })
       }else {
         output$logScaleUI <- renderUI({
           list(
-            sliderInput('yAxisRange', 'Y axis range:', min=0, step=0.1, max=ceiling(max(v$dataList_melted$OD$value)), value=c(0, ceiling(max(v$dataList_melted$OD$value))))
+            sliderInput('yAxisRange', 'Y axis range:', min=0, step=0.1, max=ceiling(max(v$dataList_melted[[1]]$value, na.rm=T)), value=c(0, ceiling(max(v$dataList_melted[[1]]$value, na.rm=T))))
           )
         })
       }
@@ -438,12 +446,21 @@ server <- function(input, output, session) {
       fluidPage(
         list(
           sliderInput('auc_window', 'Window range AUC [h]:', min=0, step=0.5, max=ceiling(max(v$timeScale)), value=c(0, ifelse(ceiling(max(v$timeScale)) > 6, 6, floor(max(v$timeScale))))),
-          selectInput('auc_selector', 'Plot to display:', choices = names(v$dataList), width='100%'),
           selectInput('auc_x_scale', 'X axis group:', choices=v$conditions, width='100%'),
           selectInput('auc_y_scale', 'Y axis group:', choices=v$conditions, width='100%')
         )
       )
     })
+    
+    ##### Growth Curver UI #####
+    output$growthcurverUI <- renderUI({
+      fluidPage(
+        list(
+          selectInput('well_selector', '', choices=v$groups$Wells, width='100%')
+        )
+      )
+    })
+    
 
     
     
@@ -468,7 +485,7 @@ server <- function(input, output, session) {
       req(input$yAxisRange)
       
       
-      df <- v$dataList_melted[["OD"]]
+      df <- v$dataList_melted[[1]]
       
       if(input$logScale) {
         df$Upper <- log10(df$value+df$SE)
@@ -482,15 +499,15 @@ server <- function(input, output, session) {
       pOD <- makePlot(df, input, isolate(v$customP), od=T)
       
       
-      if(input$secondaryPlot != "None") {
-        dfSec <- v$dataList_melted[[input$secondaryPlot]]
-        text <- input$secondaryPlot
-        if(input$secPlotMethod) {
-          dfSec$value <- isolate(as.numeric(dfSec$value)/as.numeric(v$dataList_melted[["OD"]]$value))
-          text <- paste(text, "/OD")
+      if(input$plot_selector != v$subTableNames[1]) {
+        dfSec <- v$dataList_melted[[input$plot_selector]]
+        text <- input$plot_selector
+        if(!is.null(input$secPlotMethod) && input$secPlotMethod) {
+          dfSec$value <- isolate(as.numeric(dfSec$value)/as.numeric(df$value))
+          text <- paste(text, "/", v$subTableNames[[1]])
         }
         pSec <- makePlot(dfSec, input, isolate(v$customP), text, od=F)
-        if(input$secPlotDisplay) {
+        if(!is.null(input$secPlotDisplay) && input$secPlotDisplay) {
           pOD <- ggarrange(pOD, pSec, ncol = 1, nrow = 2, align = "v", common.legend = T, legend = "right")
         }else {
           
@@ -503,19 +520,17 @@ server <- function(input, output, session) {
       return(pOD)
     }, width=reactive(input$width*72), height = reactive(input$height*72))
     
-    
-    
   })
   
   toListenAUC <- reactive({
-    list(v$groupsDF, input$auc_selector)
+    list(v$groupsDF, input$plot_selector)
   })
   
 
   ##### AUC #####
   
   observeEvent(toListenAUC(), {
-    req(input$auc_selector)
+    req(input$auc_window)
     v$auc_list <- lapply(v$dataList, function(subTable) {
       sub <- cbind(data.frame(do.call(rbind, lapply(v$groupsDF$Wells, function(well) {
           return(data.frame(Well=well, AUC=as.numeric(getAUC(v$timeScale, subTable[[well]], input$auc_window))))
@@ -523,7 +538,7 @@ server <- function(input, output, session) {
       return(sub)
     })
     
-    df <- v$auc_list[[input$auc_selector]]
+    df <- v$auc_list[[input$plot_selector]]
     
     
     output$bar_graph <- renderPlot({
@@ -545,13 +560,37 @@ server <- function(input, output, session) {
         stat_summary(geom="bar", fun = mean, position = "dodge", alpha = 0.3) +
         stat_summary(geom="errorbar", fun.data = mean_se, width = 0.3, position=position_dodge(0.9), colour="black") +
         geom_point(pch=21, position=position_jitterdodge(dodge.width=0.9), col="black", size=input$size_p) +
-        scale_y_continuous(expand = c(0,0), limits = c(0,1.03*max(df$AUC))) +
+        scale_y_continuous(expand = c(0,0), limits = c(0,1.03*max(df$AUC, na.rm=T))) +
         # ggtitle(names(v$params)[match(input$parameter, v$params)]) +
         getTheme(input$theme, input$size) +
         theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
         ylab(paste('AUC [', input$auc_window[1], 'h - ', input$auc_window[2], 'h]', sep=""))
       v$p_bar <- p_bar
       return(p_bar)
+    },  width=reactive(input$width*72), height = reactive(input$height*72))
+  })
+  
+  
+  toListenGrowthCurver <- reactive({
+    list(v$groupsDF, input$well_selector)
+  })
+  ##### GrowthCurver #####
+  observeEvent(toListenGrowthCurver(), {
+    req(input$well_selector)
+
+    df <- v$dataList[[input$plot_selector]]
+
+
+    # l <- lapply(names(df), function(g) {
+    #   return(SummarizeGrowth(v$timeScale, df[g]))
+    # })
+    # names(l) <- names(df)
+   
+    l <- SummarizeGrowth(v$timeScale, df[input$well_selector])
+    
+    output$growthcurverPlotUI <- renderPlot({
+      
+      return(plot(l))
     },  width=reactive(input$width*72), height = reactive(input$height*72))
   })
   

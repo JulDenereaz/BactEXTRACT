@@ -1,7 +1,7 @@
 
 
 themes <- c("BW" , "Classic", "Light", "Minimal", "Gray")
-react <- c("conditions", "rawdata_list", "dataList", "groups", "interactions", "rawdata", "themes_map")
+react <- c("conditions", "rawdata_list", "dataList", "groups", "names", "interactions", "rawdata", "themes_map")
 
 getFile <- function(datapath) {
   rawTableList <- list()
@@ -151,13 +151,13 @@ normalize <- function(df=NULL, method=NULL, baseOD=NULL) {
     return()
   }
   if(method == 'Mininum') {
-    return(data.frame(lapply(df, function(x) x - min(x) + as.numeric(baseOD))))
+    return(data.frame(lapply(df, function(well) well - min(well, na.rm=T) + as.numeric(baseOD, na.rm=T))))
   }else if(method == '1st value') {
-    return(data.frame(lapply(df, function(x) x - x[1] + as.numeric(baseOD))))
+    return(data.frame(lapply(df, function(well) well - well[1] + as.numeric(baseOD, na.rm=T))))
   }else if(method == 'Min(wells 1-2-3)') {
-    return(data.frame(lapply(df, function(x) x - min(x[1:3]) + as.numeric(baseOD))))
+    return(data.frame(lapply(df, function(well) well - min(well[1:3], na.rm=T) + as.numeric(baseOD, na.rm=T))))
   }else if(method == 'No Normalisation') {
-    return(data.frame(lapply(df, function(x) x=x)))
+    return(data.frame(lapply(df, function(well) well=well)))
   }
 }
 

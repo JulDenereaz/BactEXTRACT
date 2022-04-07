@@ -81,7 +81,7 @@ makePlot <- function(df, input, customP, ylabel="RLU/OD", od = T) {
     
   }else {
     p <- p + 
-      scale_y_continuous(limits=c(0, max(df$value+df$SE)), expand=c(0, 0)) +
+      scale_y_continuous(limits=c(0, max(df$value+df$SE, na.rm=T)), expand=c(0, 0)) +
       theme(axis.ticks = element_line(size=input$size/25), axis.ticks.length = unit(0.3, "cm")) +
       scale_x_continuous(expand=c(0,0), limits = input$range) +
       theme(axis.text.y.left = element_text(margin=margin(t=0, r=10, b=0, l=0))) +
