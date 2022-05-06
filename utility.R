@@ -1,5 +1,3 @@
-
-
 themes <- c("BW" , "Classic", "Light", "Minimal", "Gray")
 react <- c("conditions", "rawdata_list", "dataList", "groups", "names", "interactions", "rawdata", "themes_map")
 
@@ -25,7 +23,6 @@ getFile <- function(datapath) {
       if(grepl('Tecan i-control', rawdata)[1]) {
         subTableDF <- as.data.frame(t(subTableDF))
       }
-      
       #Setting first row as colnames
       colnames(subTableDF) <- subTableDF[1,]
       subTableDF <- subTableDF[-c(1),]
@@ -40,12 +37,27 @@ getFile <- function(datapath) {
       rawTableList$time <- subTableDF[, grep("Time", colnames(subTableDF))]/3600
       subTableDF <- subTableDF[, -grep("Temp|Time|Cycle", colnames(subTableDF))]
       
+      name <- rawdata[indexStart[i]-1,1]
+      if(is.na(name)) {
+        name <- ifelse(i == 1, "OD", i)
+      }
+      
       #Append to the list
-      rawTableList[[rawdata[indexStart[i]-1,1]]] <- as.data.frame(subTableDF)
+      rawTableList[[name]] <- as.data.frame(subTableDF)
     }
   }
   return(rawTableList)
 }
+
+getDFlogticks <- function(fw, df, nrows) {
+  facets <- unlist(strsplit(fw,", "))
+  df_facets <- df[which(colnames(df) %in% facets)]
+  df_levels <- expand.grid(rev(as.data.frame(sapply(df_facets, levels))))
+  fin <- semi_join(df_levels, df_facets, by=facets)
+  df_final <- cbind(data.frame(x=NA), fin)[seq(1, nrow(fin), by=ceiling(nrow(fin)/nrows)),]
+  return(df_final)
+}
+
 
 updateGroup <- function(groups, conditions, wells) {
 
@@ -88,6 +100,10 @@ dataMelter <- function(dataList, groups, time) {
     lapply(conditions, function(cond) {
       subTable_melt[cond] <<-  as.factor(as.vector(groups[,cond])[ind])
     })
+    #set to 0 negative values
+    subTable_melt$value <-(abs(subTable_melt$value)+subTable_melt$value)/2
+    
+    #Melt the table and create mean and SE
     subTable_melt <- cbind(
       aggregate(subTable_melt$value, by=subTable_melt[c("time", conditions)], FUN=mean),
       aggregate(subTable_melt$value, by=subTable_melt[c("time", conditions)], function(x) sd(x)/sqrt(length(x)))[length(conditions)+2]
@@ -188,6 +204,20 @@ getPalette <- function(x, customPalette=NULL) {
 }
 
 
+getUpLo <- function(df, log=F) {
+  if(log) {
+    df$Upper <- log10(df$value+df$SE)
+    df$Lower <- log10(df$value-df$SE)
+    df$value <- log10(df$value)
+  }else {
+    df$Upper <- df$value+df$SE
+    df$Lower <- df$value-df$SE
+    df$value <- df$value
+  }
+  return(df)
+}
+
+
 getAUC <- function(timeCol, odCol, range) {
   auc <- c()
   start <- which(abs(timeCol-range[1])==min(abs(timeCol-range[1])))+1
@@ -204,7 +234,6 @@ getAUC <- function(timeCol, odCol, range) {
   }
   return(sum(auc))  
 }
-
 
 
 

@@ -21,8 +21,16 @@ library(shinythemes)
 library(RColorBrewer)
 library(shinyStore)
 library(shinyBS)
+library(tidyr)
 source('utility.R', local = TRUE)
 source('plot.R', local = TRUE)
+
+
+library(ggplot2)
+library(gtable)
+library(grid)
+
+
 
 version <- "0.1"
 
@@ -323,7 +331,9 @@ server <- function(input, output, session) {
         list(
           splitLayout(
             checkboxInput('secPlotMethod', paste(input$plot_selector, '/', v$subTableNames[1]), value = F, width='100%'),
-            checkboxInput('secPlotDisplay', paste0('Dual plots with ', v$subTableNames[[1]]), value = F, width='100%')
+            selectInput('secPlotDisplay', "Display:", choices = c("Single", "Dual", "Combined"), width="100%")
+            # checkboxInput('secPlotDisplay', paste0('Dual with', v$subTableNames[[1]]), value = F, width='100%'),
+            # checkboxInput('secAxis', "Sec. Y Axis", value = F, width='100%')
             
           )
         )
@@ -352,6 +362,8 @@ server <- function(input, output, session) {
     v$groupsDF <- data.frame(hot_to_r(input$groups))
     v$groupsDF[-c(1,2,3)] <- lapply(v$groupsDF[-c(1,2,3)], factor)
     v$dataList_melted <- dataMelter(v$dataList, v$groupsDF, v$timeScale)
+    
+    
     if(is.null(v$dataList_melted)) {
       return()
     }
@@ -410,12 +422,12 @@ server <- function(input, output, session) {
     })
     observeEvent(input$fw, {
       #Only if facetWrap is select, and at least two different levels in that column
-      if(input$fw != "None" && length(isolate(levels(v$groupsDF[[input$fw]]))) > 1){
+      if(input$fw != "None"){
         output$refCurveUI <- renderUI({
           list(
             splitLayout(
               selectInput('referenceCurve', 'Ref. Curve:', choices = c("None", isolate(levels(v$groupsDF[[input$fw]]))), width='100%'),
-              numericInput('nRowsFacets', 'N. Rows:', value=1, min = 1, max = 10, step = 1)
+              numericInput('nRowsFacets', 'N. Rows:', value=2, min = 1, max = 10, step = 1)
             )
           )
         })
@@ -429,7 +441,7 @@ server <- function(input, output, session) {
       if(input$logScale) {
         output$logScaleUI <- renderUI({
           list(
-            sliderTextInput('yAxisRange', 'Y axis range:', choices = c(0.001, 0.01, 0.1, 1, 10), selected =c(0.001, ifelse(2 > 1, 10, 1)),  grid=T)
+            sliderTextInput('yAxisRange', 'Y axis range:', choices = c(0.001, 0.01, 0.1, 1, 10), selected =c(0.001, 1),  grid=T)
           )
         })
       }else {
@@ -486,34 +498,30 @@ server <- function(input, output, session) {
       
       
       df <- v$dataList_melted[[1]]
-      
-      if(input$logScale) {
-        df$Upper <- log10(df$value+df$SE)
-        df$Lower <- log10(df$value-df$SE)
-        df$value <- log10(df$value)
-      }else {
-        df$Upper <- df$value+df$SE
-        df$Lower <- df$value-df$SE
-        df$value <- df$value
-      }
       pOD <- makePlot(df, input, isolate(v$customP), od=T)
       
       
-      if(input$plot_selector != v$subTableNames[1]) {
+      if(!is.null(input$secPlotDisplay) && input$plot_selector != v$subTableNames[[1]]) {
         dfSec <- v$dataList_melted[[input$plot_selector]]
         text <- input$plot_selector
-        if(!is.null(input$secPlotMethod) && input$secPlotMethod) {
-          dfSec$value <- isolate(as.numeric(dfSec$value)/as.numeric(df$value))
+        
+        #if RLU/OD
+        if(input$secPlotMethod) {
+          dfSec$value <- isolate(as.numeric(dfSec$value)/as.numeric(v$dataList_melted[[1]]$value))
           text <- paste(text, "/", v$subTableNames[[1]])
         }
+        dfSec <- getUpLo(dfSec)
+        
         pSec <- makePlot(dfSec, input, isolate(v$customP), text, od=F)
-        if(!is.null(input$secPlotDisplay) && input$secPlotDisplay) {
-          pOD <- ggarrange(pOD, pSec, ncol = 1, nrow = 2, align = "v", common.legend = T, legend = "right")
-        }else {
-          
-          v$p <- pSec
-          return(pSec)
+        
+      
+        if(input$secPlotDisplay == "Dual") {
+          pSec <- ggarrange(pOD, pSec, ncol = 1, nrow = 2, align = "v", common.legend = T, legend = "right")
+        # }else if(input$secPlotDisplay == "Combined") {
+          # pSec <- makePlot(dfSec, input, isolate(v$customP), text, od=F)
         }
+        v$p <- pSec
+        return(pSec)
       }
       
       v$p <- pOD
@@ -548,8 +556,6 @@ server <- function(input, output, session) {
         p_bar <- p_bar + aes_string(col=paste0("interaction(", paste0(unlist(strsplit(input$color,", ")), collapse=", "),")"),
                             fill=paste0("interaction(", paste0(unlist(strsplit(input$color,", ")), collapse=", "),")")) +
           scale_color_manual(values=getPalette(x, v$customP)[[input$pal]], aesthetics = c("colour", "fill"), name=input$color)
-      }else {
-        
       }
 
       if (input$fw != "None") {
@@ -578,7 +584,7 @@ server <- function(input, output, session) {
   observeEvent(toListenGrowthCurver(), {
     req(input$well_selector)
 
-    df <- v$dataList[[input$plot_selector]]
+    df <- v$dataList[[1]]
 
 
     # l <- lapply(names(df), function(g) {
