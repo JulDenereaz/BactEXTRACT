@@ -167,6 +167,9 @@ server <- function(input, output, session) {
           # checkboxInput('RLU', 'RLU', value = F),
           selectInput('norm', 'OD Normalisation :', choices=c('Mininum', '1st value', 'Min(wells 1-2-3)', "No Normalisation")),
           selectInput('norm_baseOD', 'Base OD', choices=c(0, 0.001, 0.002, 0.003, 0.004), selected = 0.001),
+          selectInput('techAggr', 'Tech. Repl. Merging:', choices=c("None", "Horizontal", "Vertical")),
+          uiOutput('techAggrUI'),
+          tags$hr(style='margin-bottom:5px'),
           textInput('conditionsUI_Input', 'Enter Conditions:', value=paste(input$localStorage$cond, collapse = ","), placeholder = "Strain, Treatment, ..."),
           uiOutput('error_condition'),
           column(12, align="center", p('(Cannot start with number, separated by coma)')),     
@@ -213,26 +216,52 @@ server <- function(input, output, session) {
     
   })
   
+  observeEvent(input$techAggr , {
+    if(input$techAggr != "None"){
+      output$techAggrUI <- renderUI({
+        list(
+          numericInput('techAggrN', 'By:', value=3, min=2)
+        )
+      })
+    }else {
+      output$techAggrUI <- NULL
+    }
+  })
+  
+  
   ##### Update button Panel #####
   observeEvent(input$updateCond, {
     req(input$conditionsUI_Input)
-    
-    
     v$conditions <- formartConditions(input$conditionsUI_Input)
     
+    #Aggregating technical replicate by mean
+    if(input$techAggr != "None") {
+      aggdata_list <- aggrTech(v$rawdata_list, input$techAggrN, input$techAggr =="Horizontal")
+    }else {
+      aggdata_list <- v$rawdata_list
+    }
+
     
-    #v$groups is a dataframe containing all levels for each condition for each well
     if(!is.null(v$groups)) {
-      v$groups[colnames(data.frame(hot_to_r(input$groups)))] <- data.frame(hot_to_r(input$groups))
+      #Reset the v$groups if the user change the settings of technical replicate aggregating
+      if(!setequal(colnames(aggdata_list[[1]]),v$groups$Wells)) {
+        v$groups <- NULL
+      }else {
+        v$groups[colnames(data.frame(hot_to_r(input$groups)))] <- data.frame(hot_to_r(input$groups))
+      }
     }
     
     #add localstorage for groups, if same number of rows
-    v$groups <- updateGroup(isolate(v$groups), v$conditions, colnames(v$rawdata_list[[1]]))
+    
+    
+    v$groups <- updateGroup(isolate(v$groups), v$conditions, colnames(aggdata_list[[1]]))
+
     
     v$interactions <- getInteractions(v$conditions)
     
     #normalization
-    v$dataList <- isolate(v$rawdata_list)
+    v$dataList <- aggdata_list
+    
     v$dataList[[1]] = normalize(isolate(v$dataList[[1]]), input$norm, input$norm_baseOD)
     updateStore(session, name = "cond", value = v$conditions)
     
@@ -323,6 +352,7 @@ server <- function(input, output, session) {
         )
       )
     })
+    
   })
   
   observeEvent(input$plot_selector, {
@@ -531,7 +561,7 @@ server <- function(input, output, session) {
   })
   
   toListenAUC <- reactive({
-    list(v$groupsDF, input$plot_selector)
+    list(v$groupsDF, input$plot_selector, input$auc_window)
   })
   
 

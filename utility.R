@@ -76,6 +76,41 @@ updateGroup <- function(groups, conditions, wells) {
 }
 
 
+#To optimize
+aggrTech <- function(dataList, N, horiz=T) {
+  if(ncol(dataList[[1]]) %% N) {
+    #showNotification()
+    return(dataList)
+  }
+  
+  dataList_aggre <- lapply(dataList, function(df) {
+    
+    #horiz => A1, A2, A3
+    if(horiz) {
+      newDF <- do.call(cbind, lapply(seq(1, ncol(df), by=N), function(colN) {
+        temp <- data.frame(rowMeans(df[colN:(colN+N-1)]))
+        colnames(temp) <- paste(colnames(df)[colN:(colN+N-1)], collapse="-")
+        return(temp)
+      }))
+    #vertical => A1, B1, C1
+    }else {
+      nam <- colnames(df)
+      x <- match(nam[order(as.numeric(gsub("\\D", "", nam)))], nam)
+      newDF <- do.call(cbind, lapply(seq(1, ncol(df), by=N), function(colN) {
+        temp <- data.frame(rowMeans(df[x[colN:(colN+N-1)]]))
+        colnames(temp) <- paste(colnames(df)[x[colN:(colN+N-1)]], collapse="-")
+        return(temp)
+      }))
+    }
+    
+    
+    
+    return(newDF)
+  })
+  return(dataList_aggre)
+}
+
+
 dataMelter <- function(dataList, groups, time) {
   
 
@@ -91,7 +126,6 @@ dataMelter <- function(dataList, groups, time) {
 
   #looping over each subTable, skipping the time vector
   dataList_melted <- lapply(dataList, function(subTable) {
-    
     #subset only selected wells with KeepWell
     subTable <-  subTable[which(names(subTable) %in% c(groups$Wells))]
     # subTable <- subTable[which(time >= timeRange[1] & time <= timeRange[2]),]
@@ -102,7 +136,6 @@ dataMelter <- function(dataList, groups, time) {
     })
     #set to 0 negative values
     subTable_melt$value <-(abs(subTable_melt$value)+subTable_melt$value)/2
-    
     #Melt the table and create mean and SE
     subTable_melt <- cbind(
       aggregate(subTable_melt$value, by=subTable_melt[c("time", conditions)], FUN=mean),
@@ -167,13 +200,13 @@ normalize <- function(df=NULL, method=NULL, baseOD=NULL) {
     return()
   }
   if(method == 'Mininum') {
-    return(data.frame(lapply(df, function(well) well - min(well, na.rm=T) + as.numeric(baseOD, na.rm=T))))
+    return(data.frame(lapply(df, function(well) well - min(well, na.rm=T) + as.numeric(baseOD, na.rm=T)), check.names = F))
   }else if(method == '1st value') {
-    return(data.frame(lapply(df, function(well) well - well[1] + as.numeric(baseOD, na.rm=T))))
+    return(data.frame(lapply(df, function(well) well - well[1] + as.numeric(baseOD, na.rm=T)), check.names = F))
   }else if(method == 'Min(wells 1-2-3)') {
-    return(data.frame(lapply(df, function(well) well - min(well[1:3], na.rm=T) + as.numeric(baseOD, na.rm=T))))
+    return(data.frame(lapply(df, function(well) well - min(well[1:3], na.rm=T) + as.numeric(baseOD, na.rm=T)), check.names = F))
   }else if(method == 'No Normalisation') {
-    return(data.frame(lapply(df, function(well) well=well)))
+    return(data.frame(lapply(df, function(well) well=well), check.names = F))
   }
 }
 
