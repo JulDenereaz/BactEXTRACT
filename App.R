@@ -168,7 +168,7 @@ server <- function(input, output, session) {
           h3('Options :'),
           selectInput('norm', 'OD Normalisation :', choices=c('Mininum', '1st value', 'Min(wells 1-2-3)', "No Normalisation")),
           selectInput('norm_baseOD', 'Base OD', choices=c(0, 0.001, 0.002, 0.003, 0.004), selected = 0.001),
-          selectInput('techAggr', 'Tech. Repl. Merging:', choices=c("None", "Horizontal", "Vertical"), selected = "Horizontal"),
+          selectInput('techAggr', 'Tech. Repl. Merging:', choices=c("None", "Horizontal", "Vertical")),
           uiOutput('techAggrUI'),
           tags$hr(style='margin-bottom:5px'),
           textInput('conditionsUI_Input', 'Enter Conditions:', value=paste(input$localStorage$cond, collapse = ","), placeholder = "Strain, Treatment, ..."),
