@@ -1,5 +1,5 @@
 themes <- c("BW" , "Classic", "Light", "Minimal", "Gray")
-react <- c("conditions", "rawdata_list", "dataList", "groups", "names", "interactions", "rawdata", "themes_map")
+react <- c("conditions", "rawdata_list", "dataList", "groups", "names", "interactions", "rawdata", "themes_map", "params_list")
 
 getFile <- function(datapath) {
   rawTableList <- list()
@@ -77,7 +77,8 @@ updateGroup <- function(groups, conditions, wells) {
 
 
 #To optimize
-aggrTech <- function(dataList, N, horiz=T) {
+aggrTech <- function(dataList, N, horiz=T, multiF=F) {
+  #If N not a multiple of total number of wells
   if(ncol(dataList[[1]]) %% N) {
     #showNotification()
     return(dataList)
@@ -86,24 +87,29 @@ aggrTech <- function(dataList, N, horiz=T) {
   dataList_aggre <- lapply(dataList, function(df) {
     
     #horiz => A1, A2, A3
-    if(horiz) {
-      newDF <- do.call(cbind, lapply(seq(1, ncol(df), by=N), function(colN) {
-        temp <- data.frame(rowMeans(df[colN:(colN+N-1)]))
-        colnames(temp) <- paste(colnames(df)[colN:(colN+N-1)], collapse="-")
-        return(temp)
-      }))
-    #vertical => A1, B1, C1
-    }else {
-      nam <- colnames(df)
-      x <- match(nam[order(as.numeric(gsub("\\D", "", nam)))], nam)
-      newDF <- do.call(cbind, lapply(seq(1, ncol(df), by=N), function(colN) {
-        temp <- data.frame(rowMeans(df[x[colN:(colN+N-1)]]))
-        colnames(temp) <- paste(colnames(df)[x[colN:(colN+N-1)]], collapse="-")
-        return(temp)
-      }))
-    }
-    
-    
+    newDF <- do.call(cbind, lapply(seq(1, ncol(df), by=N), function(colN) {
+      subs <- colN:(colN+N-1)
+      if(!horiz) {
+        nam <- colnames(df)
+        x <- match(nam[order(as.numeric(gsub("\\D", "", nam)))], nam)
+        subs <- x[subs]
+      }
+      temp <- data.frame(rowMeans(df[subs]))
+      nam <- colnames(df)[subs]
+      
+      if(length(multiF) > 1) {
+        for (ti in paste0(multiF, "_")) {
+          if(any(grepl(ti, nam))) {
+            nam <- gsub(ti, "", nam)
+            colnames(temp) <- paste0(ti, paste(nam, collapse="-"))
+          }
+        }
+      }else {
+        colnames(temp) <- paste(nam, collapse="-")
+      }
+      
+      return(temp)
+    }))
     
     return(newDF)
   })
@@ -265,10 +271,16 @@ getAUC <- function(timeCol, odCol, range) {
     if(x < 0) {x <- 0}
     auc <- c(auc, x)
   }
-  return(sum(auc))  
+  return(as.numeric(sum(auc)))  
 }
 
-
+getLogisticParameters <- function(timeCol, plate, range) {
+  tmp <- cbind(data.frame(time=timeCol), plate)
+  tmp <- tmp[which(tmp$time >= range[1] & tmp$time <= range[2]),]
+  
+  tmp <- SummarizeGrowthByPlate(tmp)
+  return(tmp)
+}
 
 
 

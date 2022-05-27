@@ -104,32 +104,28 @@ ui = dashboardPage(
             plotOutput('plot')
           ),
           tabPanel(
-            'AUC Plot',
+            'Growth parameters',
             column(
               width=2,
-              uiOutput("AUC_ui")
+              uiOutput("growth_param_ui")
             ),
             
             column(
               width=5,
-              plotOutput('bar_graph')              
-            ),
-            column(
-              width=5,
-              plotOutput('tile_graph')
+              plotOutput('params_plot')              
             )
-          ),
-          tabPanel(
-            'GrowthCurver', 
-            column(
-              width=2,
-              uiOutput('growthcurverUI')
-            ),
-            
-            column(
-              width=5,
-              plotOutput('growthcurverPlotUI')              
-            )
+          # ),
+          # tabPanel(
+          #   'GrowthCurver', 
+          #   column(
+          #     width=2,
+          #     uiOutput('growthcurverUI')
+          #   ),
+          #   
+          #   column(
+          #     width=5,
+          #     plotOutput('growthcurverPlotUI')              
+          #   )
           )
         )
       )
@@ -150,12 +146,18 @@ server <- function(input, output, session) {
     list(input$norm,input$norm_baseOD, input$files)
   })
   
+  v$params <- c(
+    "Growth Rate"="r",
+    "Trapezoidal AUC" = "AUC",
+    "Empirical AUC"="auc_e",
+    "Area under the logistic curve"="auc_l",
+    "Doubling time"="t_gen",
+    "Inflection Point"="t_mid",
+    "Carrying capacity"="k",
+    "Log initial population size"="n0",
+    "Sigma"="sigma"
+  )
   
-  # observeEvent(toListen2(), {
-  #   req(v$rawdata)
-  #   #Called when normalization input is modified, or when new files is uploaded
-  #   v$df[2:ncol(v$df)] = normalize(isolate(v$rawdata), isolate(input$norm), isolate(input$norm_baseOD))
-  # })
   
   observeEvent(input$files, {
     req(input$files)
@@ -164,17 +166,16 @@ server <- function(input, output, session) {
         list(
           tags$hr(),
           h3('Options :'),
-          # checkboxInput('RLU', 'RLU', value = F),
           selectInput('norm', 'OD Normalisation :', choices=c('Mininum', '1st value', 'Min(wells 1-2-3)', "No Normalisation")),
           selectInput('norm_baseOD', 'Base OD', choices=c(0, 0.001, 0.002, 0.003, 0.004), selected = 0.001),
-          selectInput('techAggr', 'Tech. Repl. Merging:', choices=c("None", "Horizontal", "Vertical")),
+          selectInput('techAggr', 'Tech. Repl. Merging:', choices=c("None", "Horizontal", "Vertical"), selected = "Horizontal"),
           uiOutput('techAggrUI'),
           tags$hr(style='margin-bottom:5px'),
           textInput('conditionsUI_Input', 'Enter Conditions:', value=paste(input$localStorage$cond, collapse = ","), placeholder = "Strain, Treatment, ..."),
           uiOutput('error_condition'),
           column(12, align="center", p('(Cannot start with number, separated by coma)')),     
-          column(12, align="center", actionButton('updateCond', 'Update'))
-          # bsTooltip("conditionsUI_Input", "Tooltip works", placement = "bottom", trigger = "hover", options = NULL)
+          column(12, align="center", actionButton('updateCond', 'Update')),
+          bsTooltip("conditionsUI_Input", "Tooltip works", placement = "right", trigger = "hover", options = NULL)
         )
       )
     })
@@ -236,7 +237,7 @@ server <- function(input, output, session) {
     
     #Aggregating technical replicate by mean
     if(input$techAggr != "None") {
-      aggdata_list <- aggrTech(v$rawdata_list, input$techAggrN, input$techAggr =="Horizontal")
+      aggdata_list <- aggrTech(v$rawdata_list, input$techAggrN, input$techAggr =="Horizontal", multiF = tools::file_path_sans_ext(input$files$name))
     }else {
       aggdata_list <- v$rawdata_list
     }
@@ -398,44 +399,58 @@ server <- function(input, output, session) {
       return()
     }
     
-    ##### Downloads UI #####
+    ##### Downloads #####
     output$downloads <- renderUI({
       list(
         column(12, align="center",
                tags$hr(),
                tags$style(".skin-blue .sidebar a { color: #444; }"),
-               downloadButton("downloaddf", label = "Download Full Data"),
+               downloadButton("download_df", label = "Download Full Data"),
                tags$p(""),
-               downloadButton("downloadpdf", label = "Download Growth Plot (PDF)"),
-               downloadButton("downloadeps", label = "Download Growth Plot (EPS)"),
+               downloadButton("download_pdf", label = "Download Growth Plot (PDF)"),
+               downloadButton("download_eps", label = "Download Growth Plot (EPS)"),
                tags$hr(),
-               downloadButton("downloadquc", label = "Download AUC Data"),
-               tags$p(),
-               downloadButton("downloadquc_plot", label = "Download AUC Plot")
+               uiOutput('downloadUI_params')
+
         )
       )
     })
-    output$downloaddf <- downloadHandler(
-      filename <- function() {
-        "dataframe.csv"
-      },
-      content <- function(file) {
+    output$download_df <- downloadHandler(
+      function() {paste0(input$title, "_growthData.csv")},
+      function(file) {
         write.csv(v$dataList_melted, file, row.names = FALSE)
       }
     )
-    output$downloadpdf <- downloadHandler(
-      filename = function(){paste(input$title,'.pdf', sep='')},
-      content = function(file){
+    output$download_pdf <- downloadHandler(
+      function(){paste0(input$title,'.pdf')},
+      function(file){
         ggsave(file,plot=v$p, width=input$width, height=input$height, units="in", dpi=300, device=cairo_pdf)
       }
     )    
-    output$downloadeps <- downloadHandler(
-      filename = function(){paste(input$title,'.eps', sep='')},
-      content = function(file){
+    output$download_eps <- downloadHandler(
+      function(){paste0(input$title,'.eps')},
+      function(file){
         ggsave(file,plot=v$p, width=input$width, height=input$height, units="in", dpi=300, device=cairo_ps)
       }
     )
-    
+    output$downloadparams_df <- downloadHandler(
+      function() {paste0(input$title, "_growthParameters.csv")},
+      function(file) {
+        write.csv(v$params_list, file, row.names = FALSE)
+      }
+    )
+    output$downloadparams_pdf <- downloadHandler(
+      function(){paste(input$title, "_", input$param_selector, '.pdf',sep='')},
+      function(file){
+        ggsave(file,plot=v$p_bar, width=input$width, height=input$height, units="in", dpi=300, device=cairo_pdf)
+      }
+    )
+    output$downloadparams_eps <- downloadHandler(
+      function(){paste0(input$title,'.eps')},
+      function(file){
+        ggsave(file,plot=v$p_bar, width=input$width, height=input$height, units="in", dpi=300, device=cairo_ps)
+      }
+    )
     
     
     ##### LevelOrder UI #####
@@ -483,25 +498,28 @@ server <- function(input, output, session) {
       }
     })
     
-    ##### AUC UI #####
-    output$AUC_ui <- renderUI({
+    ##### Growth Parameters UI #####
+    output$growth_param_ui <- renderUI({
       fluidPage(
         list(
           sliderInput('auc_window', 'Window range AUC [h]:', min=0, step=0.5, max=ceiling(max(v$timeScale)), value=c(0, ifelse(ceiling(max(v$timeScale)) > 6, 6, floor(max(v$timeScale))))),
-          selectInput('auc_x_scale', 'X axis group:', choices=v$conditions, width='100%'),
-          selectInput('auc_y_scale', 'Y axis group:', choices=v$conditions, width='100%')
+          selectInput('param_plot_selector', "Plot to display:", choices=c("Bar Plot", "Tile Plot", "Logistic Curves")),
+          selectInput('params_x_scale', 'X axis group:', choices=v$conditions, width='100%'),
+          selectInput('params_y_scale', 'Y axis group (Only for Tile Plot):', choices=v$conditions, width='100%'),
+          selectInput('param_selector', 'Parameter to display:', choices=c(names(v$params)), width='100%')
         )
       )
     })
     
     ##### Growth Curver UI #####
-    output$growthcurverUI <- renderUI({
-      fluidPage(
-        list(
-          selectInput('well_selector', '', choices=v$groups$Wells, width='100%')
-        )
-      )
-    })
+    # output$growthcurverUI <- renderUI({
+    #   fluidPage(
+    #     list(
+    #       sliderInput('gc_window', 'Window range [h]:', min=0, step=0.5, max=ceiling(max(v$timeScale)), value=c(0, ifelse(ceiling(max(v$timeScale)) > 6, 6, floor(max(v$timeScale))))),
+    #       selectInput('well_selector', '', choices=v$groups$Wells, width='100%')
+    #     )
+    #   )
+    # })
     
 
     
@@ -560,73 +578,116 @@ server <- function(input, output, session) {
     
   })
   
-  toListenAUC <- reactive({
+  toListenParams <- reactive({
     list(v$groupsDF, input$plot_selector, input$auc_window)
   })
   
 
-  ##### AUC #####
+  ##### Parameters #####
   
-  observeEvent(toListenAUC(), {
+  observeEvent(toListenParams(), {
     req(input$auc_window)
-    v$auc_list <- lapply(v$dataList, function(subTable) {
-      sub <- cbind(data.frame(do.call(rbind, lapply(v$groupsDF$Wells, function(well) {
-          return(data.frame(Well=well, AUC=as.numeric(getAUC(v$timeScale, subTable[[well]], input$auc_window))))
-        }))), v$groupsDF[v$conditions])
+    
+    
+    v$params_list <- lapply(v$dataList, function(subTable) {
+      subTable <- subTable[v$groupsDF$KeepWell == "Yes"]
+      
+      data <- getLogisticParameters(v$timeScale, subTable, input$auc_window)[2:10]
+      sub <- cbind(data.frame(do.call(rbind, lapply(colnames(subTable), function(well) {
+          return(data.frame(Well=well, AUC=getAUC(v$timeScale, subTable[[well]], input$auc_window)))
+        }))), data, v$groupsDF[v$groupsDF$KeepWell == "Yes", v$conditions])
       return(sub)
     })
     
-    df <- v$auc_list[[input$plot_selector]]
+    
+    output$downloadUI_params <- renderUI({
+      list(
+        downloadButton("downloadparams_df", label = "Download Growth Parameters Data"),
+        tags$p(),
+        downloadButton("downloadparams_pdf", label = "Download Growth Parameters (PDF)"),
+        downloadButton("downloadparams_eps", label = "Download Growth Parameters (EPS)")
+      )
+    })
     
     
-    output$bar_graph <- renderPlot({
-      p_bar <- ggplot(df, aes_string(y="AUC", x=input$auc_x_scale))
-      if(input$color != 'None') {
-        x <- nrow(unique(df[unlist(strsplit(input$color,", "))]))
-        p_bar <- p_bar + aes_string(col=paste0("interaction(", paste0(unlist(strsplit(input$color,", ")), collapse=", "),")"),
-                            fill=paste0("interaction(", paste0(unlist(strsplit(input$color,", ")), collapse=", "),")")) +
-          scale_color_manual(values=getPalette(x, v$customP)[[input$pal]], aesthetics = c("colour", "fill"), name=input$color)
-      }
+    df <- v$params_list[[input$plot_selector]]
+    dataOD <- cbind(data.frame(time=v$timeScale), v$dataList[[input$plot_selector]])
+    dataOD <- dataOD[which(dataOD$time >= input$auc_window[1] & dataOD$time <= input$auc_window[2]),]
 
-      if (input$fw != "None") {
-        p_bar <- p_bar + facet_wrap(as.formula(paste("~", paste0(unlist(strsplit(input$fw,", ")), collapse="+"))), scales="free", nrow = input$nRowsFacets)
-      }
-      
-      p_bar <- p_bar +
-        stat_summary(geom="bar", fun = mean, position = "dodge", alpha = 0.3) +
-        stat_summary(geom="errorbar", fun.data = mean_se, width = 0.3, position=position_dodge(0.9), colour="black") +
-        geom_point(pch=21, position=position_jitterdodge(dodge.width=0.9), col="black", size=input$size_p) +
-        scale_y_continuous(expand = c(0,0), limits = c(0,1.03*max(df$AUC, na.rm=T))) +
-        # ggtitle(names(v$params)[match(input$parameter, v$params)]) +
-        getTheme(input$theme, input$size) +
-        theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
-        ylab(paste('AUC [', input$auc_window[1], 'h - ', input$auc_window[2], 'h]', sep=""))
-      v$p_bar <- p_bar
-      return(p_bar)
-    },  width=reactive(input$width*72), height = reactive(input$height*72))
-  })
+    output$params_plot <- renderPlot({
+      if(input$param_plot_selector == "Bar Plot") {
+        p_bar <- ggplot(df, aes_string(y=v$params[input$param_selector], x=input$params_x_scale))
+        if(input$color != 'None') {
+          x <- nrow(unique(df[unlist(strsplit(input$color,", "))]))
+          p_bar <- p_bar + aes_string(col=paste0("interaction(", paste0(unlist(strsplit(input$color,", ")), collapse=", "),")"),
+                              fill=paste0("interaction(", paste0(unlist(strsplit(input$color,", ")), collapse=", "),")")) +
+            scale_color_manual(values=getPalette(x, v$customP)[[input$pal]], aesthetics = c("colour", "fill"), name=input$color)
+        }
   
-  
-  toListenGrowthCurver <- reactive({
-    list(v$groupsDF, input$well_selector)
-  })
-  ##### GrowthCurver #####
-  observeEvent(toListenGrowthCurver(), {
-    req(input$well_selector)
+        if (input$fw != "None") {
+          p_bar <- p_bar + facet_wrap(as.formula(paste("~", paste0(unlist(strsplit(input$fw,", ")), collapse="+"))), nrow = input$nRowsFacets)
+        }
+        
+        p_bar <- p_bar +
+          stat_summary(geom="bar", fun = mean, position = "dodge", alpha = 0.3) +
+          stat_summary(geom="errorbar", fun.data = mean_se, width = 0.3, position=position_dodge(0.9), colour="black") +
+          geom_point(pch=21, position=position_jitterdodge(dodge.width=0.9), col="black", size=input$size_p) +
+          scale_y_continuous(expand = c(0,0), limits = c(0,1.03*max(df[v$params[input$param_selector]], na.rm=T))) +
+          # ggtitle(names(v$params)[match(input$parameter, v$params)]) +
+          getTheme(input$theme, input$size) +
+          theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+          ylab(paste(input$param_selector, ' [', input$auc_window[1], 'h - ', input$auc_window[2], 'h]', sep=""))
+        v$p_bar <- p_bar
+        return(p_bar)
+        
+      }else if(input$param_plot_selector == "Tile Plot") {
+        
+        
+        p_tile <- ggplot(df, aes_string(y=input$params_y_scale, x=input$params_x_scale, fill=v$params[input$param_selector])) + 
+            scale_fill_gradientn(colours=getPalette(8, v$customP)[[input$pal]], aesthetics = "fill", name=input$param_selector)
 
-    df <- v$dataList[[1]]
+        if (input$fw != "None" && !is.null(input$referenceCurve) ) {
+          if(input$referenceCurve != "None") {
+            p_tile <- p_tile + facet_wrap(~facetRef, nrow = input$nRowsFacets)
+          }else {
+            p_tile <- p_tile + facet_wrap(as.formula(paste("~", paste0(unlist(strsplit(input$fw,", ")), collapse="+"))), nrow = input$nRowsFacets)
+          }
+        }
+        p_tile <- p_tile +
+          geom_raster() +
+          scale_y_discrete(expand = c(0,0)) +
+          scale_x_discrete(expand = c(0,0)) +
+          getTheme(input$theme, input$size) +
+          theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+          ggtitle(paste(input$param_selector, ' [', input$auc_window[1], 'h - ', input$auc_window[2], 'h]', sep="")) +
+          theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())
+        v$p_tile <- p_tile
+        return(p_tile)
 
+        
+        
+        
+        
+      }else {
+        ps <- do.call(grid.arrange, lapply(1:nrow(df), function(sample_index) {
+          k <- df[sample_index, "k"]
+          N0 <- df[sample_index, "n0"]
+          r <- df[sample_index, "r"]
+          currentWell <- df$Well[sample_index]
+          p <- ggplot(dataOD, aes_string(x="time", y=sym(currentWell))) +
+            geom_line(size=1.2) +
+            stat_function(fun = function(t) k / (1 + ((k - N0) / N0) * exp(-r * t)), col="red") +
+            ylim(0, 1.15*max(dataOD[-1], na.rm=T)) +
+            theme_classic() +
+            annotate(geom = 'text', label = paste(" ", currentWell), x = -Inf, y = Inf, hjust = 0, vjust = 1) +
+            theme(axis.title=element_blank(),
+                  axis.text=element_blank(),
+                  axis.ticks=element_blank(),
+                  panel.grid=element_blank())
 
-    # l <- lapply(names(df), function(g) {
-    #   return(SummarizeGrowth(v$timeScale, df[g]))
-    # })
-    # names(l) <- names(df)
-   
-    l <- SummarizeGrowth(v$timeScale, df[input$well_selector])
-    
-    output$growthcurverPlotUI <- renderPlot({
-      
-      return(plot(l))
+          return(p)
+        }))
+      }
     },  width=reactive(input$width*72), height = reactive(input$height*72))
   })
   
