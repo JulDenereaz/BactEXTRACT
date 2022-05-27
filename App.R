@@ -147,10 +147,10 @@ server <- function(input, output, session) {
   })
   
   v$params <- c(
-    "Growth Rate"="r",
-    "Trapezoidal AUC" = "AUC",
     "Empirical AUC"="auc_e",
-    "Area under the logistic curve"="auc_l",
+    "Logistic AUC"="auc_l",
+    "Trapezoidal AUC" = "AUC",
+    "Growth Rate"="r",
     "Doubling time"="t_gen",
     "Inflection Point"="t_mid",
     "Carrying capacity"="k",
@@ -661,7 +661,7 @@ server <- function(input, output, session) {
           theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
           ggtitle(paste(input$param_selector, ' [', input$auc_window[1], 'h - ', input$auc_window[2], 'h]', sep="")) +
           theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())
-        v$p_tile <- p_tile
+        v$p_bar <- p_tile
         return(p_tile)
 
         
@@ -684,9 +684,11 @@ server <- function(input, output, session) {
                   axis.text=element_blank(),
                   axis.ticks=element_blank(),
                   panel.grid=element_blank())
-
+          
           return(p)
         }))
+        v$p_bar <- ps
+        return(ps)
       }
     },  width=reactive(input$width*72), height = reactive(input$height*72))
   })
