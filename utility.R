@@ -49,9 +49,12 @@ getFile <- function(datapath) {
   return(rawTableList)
 }
 
-getDFlogticks <- function(fw, df, nrows) {
+getDFlogticks <- function(fw, df, nrows, data) {
   facets <- unlist(strsplit(fw,", "))
   df_facets <- df[which(colnames(df) %in% facets)]
+  if(sum(!duplicated(df_facets)) == 1) {
+    return(data)
+  }
   df_levels <- expand.grid(rev(as.data.frame(sapply(df_facets, levels))))
   fin <- semi_join(df_levels, df_facets, by=facets)
   df_final <- cbind(data.frame(x=NA), fin)[seq(1, nrow(fin), by=ceiling(nrow(fin)/nrows)),]

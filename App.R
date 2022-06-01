@@ -175,7 +175,9 @@ server <- function(input, output, session) {
           uiOutput('error_condition'),
           column(12, align="center", p('(Cannot start with number, separated by coma)')),     
           column(12, align="center", actionButton('updateCond', 'Update')),
+          bsTooltip("conditionsUI_Input", "Tooltip works", placement = "right", trigger = "hover", options = NULL),
           bsTooltip("conditionsUI_Input", "Tooltip works", placement = "right", trigger = "hover", options = NULL)
+          
         )
       )
     })
@@ -472,7 +474,7 @@ server <- function(input, output, session) {
           list(
             splitLayout(
               selectInput('referenceCurve', 'Ref. Curve:', choices = c("None", isolate(levels(v$groupsDF[[input$fw]]))), width='100%'),
-              numericInput('nRowsFacets', 'N. Rows:', value=2, min = 1, max = 10, step = 1)
+              numericInput('nRowsFacets', 'N. Rows:', value=1, min = 1, max = 10, step = 1)
             )
           )
         })
@@ -510,20 +512,6 @@ server <- function(input, output, session) {
         )
       )
     })
-    
-    ##### Growth Curver UI #####
-    # output$growthcurverUI <- renderUI({
-    #   fluidPage(
-    #     list(
-    #       sliderInput('gc_window', 'Window range [h]:', min=0, step=0.5, max=ceiling(max(v$timeScale)), value=c(0, ifelse(ceiling(max(v$timeScale)) > 6, 6, floor(max(v$timeScale))))),
-    #       selectInput('well_selector', '', choices=v$groups$Wells, width='100%')
-    #     )
-    #   )
-    # })
-    
-
-    
-    
   })
   
   
@@ -694,13 +682,6 @@ server <- function(input, output, session) {
   })
   
 }
-
-
-
-
-
-
-
 
 
 
