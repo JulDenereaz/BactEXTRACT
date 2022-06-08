@@ -1,5 +1,5 @@
 themes <- c("BW" , "Classic", "Light", "Minimal", "Gray")
-react <- c("conditions", "rawdata_list", "dataList", "groups", "names", "interactions", "rawdata", "themes_map", "params_list")
+react <- c("conditions", "rawdata_list", "dataList", "groups", "names", "interactions", "rawdata", "themes_map", "params_list", "params_df", "groupDF_subset")
 
 getFile <- function(datapath) {
   rawTableList <- list()
@@ -260,22 +260,69 @@ getUpLo <- function(df, log=F) {
 }
 
 
-getAUC <- function(timeCol, odCol, range) {
-  auc <- c()
-  start <- which(abs(timeCol-range[1])==min(abs(timeCol-range[1])))+1
-  end <-  which(abs(timeCol-range[2])==min(abs(timeCol-range[2])))
-  if(end == length(odCol)) {
-    end <- end-1
-  }
-  for (i in start:end) {
-    #Formula taken from doi.org/10.1016/j.febslet.2005.02.025
-    #Trapezoidal AUC
-    x <- ((odCol[i]+odCol[i+1])/2-odCol[1]) * (timeCol[i+1]-timeCol[i])
-    if(x < 0) {x <- 0}
-    auc <- c(auc, x)
-  }
-  return(as.numeric(sum(auc)))  
+getTrapezoidalAUC <- function(timeCol, plate, range) {
+  AUC <- lapply(colnames(plate), function(well) {
+    odCol <- plate[[well]]
+    auc <- c()
+    start <- which(abs(timeCol-range[1])==min(abs(timeCol-range[1])))+1
+    end <-  which(abs(timeCol-range[2])==min(abs(timeCol-range[2])))
+    if(end == length(odCol)) {
+      end <- end-1
+    }
+    for (i in start:end) {
+      #Formula taken from doi.org/10.1016/j.febslet.2005.02.025
+      #Trapezoidal AUC
+      x <- ((odCol[i]+odCol[i+1])/2-odCol[1]) * (timeCol[i+1]-timeCol[i])
+      if(x < 0) {x <- 0}
+      auc <- c(auc, x)
+    }
+    return(as.numeric(sum(auc)))  
+  })
+  return(as.numeric(AUC))
 }
+
+getMaxVal <- function(timeCol, plate, range) {
+  max <- lapply(colnames(plate), function(well) {
+    
+    odCol <- plate[[well]]
+    
+    odCol <- odCol[which(timeCol >= range[1] & timeCol <= range[2])]
+    
+    return(as.numeric(max(odCol)))
+  })
+  return(as.numeric(max))
+}
+
+getMu <- function(N, N0, t, t0) {
+  #µ = ( (log10 N - log10 N0) 2.303) / (t - t0)
+  if(N<0 || N0<0) {
+    return(0)
+  }
+  return(((log10(N) - log10(N0))* 2.303) / (t - t0))
+}
+
+getMaxGr <- function(timeCol, plate, range) {
+  
+  max <- lapply(colnames(plate), function(well) {
+    odCol <- plate[[well]]
+    odCol <- odCol[which(timeCol >= range[1] & timeCol <= range[2])]
+    timeCol <- timeCol[which(timeCol >= range[1] & timeCol <= range[2])]
+    
+    maxgr <- 0
+    for (i in 2:length(odCol)) {
+      mu <- getMu(odCol[i], odCol[i-1], timeCol[i], timeCol[i-1])
+      if(mu > maxgr) {
+        maxgr <- mu
+      }
+    }
+    return(maxgr)
+  })
+  return(as.numeric(max))
+  
+}
+
+
+
 
 getLogisticParameters <- function(timeCol, plate, range) {
   tmp <- cbind(data.frame(time=timeCol), plate)

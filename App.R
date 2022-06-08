@@ -150,12 +150,14 @@ server <- function(input, output, session) {
     "Empirical AUC"="auc_e",
     "Logistic AUC"="auc_l",
     "Trapezoidal AUC" = "AUC",
-    "Growth Rate"="r",
-    "Doubling time"="t_gen",
-    "Inflection Point"="t_mid",
-    "Carrying capacity"="k",
-    "Log initial population size"="n0",
-    "Sigma"="sigma"
+    "Max value" = "max_val",
+    "Max Growth Rate" = "max_gr",
+    "Growth Rate (Logistic)"="r",
+    "Doubling time (Logistic)"="t_gen",
+    "Inflection Point (Logistic)"="t_mid",
+    "Carrying capacity (Logistic)"="k",
+    "Log initial population size (Logistic)"="n0",
+    "Sigma (Logistic)"="sigma"
   )
   
   
@@ -175,9 +177,7 @@ server <- function(input, output, session) {
           uiOutput('error_condition'),
           column(12, align="center", p('(Cannot start with number, separated by coma)')),     
           column(12, align="center", actionButton('updateCond', 'Update')),
-          bsTooltip("conditionsUI_Input", "Tooltip works", placement = "right", trigger = "hover", options = NULL),
           bsTooltip("conditionsUI_Input", "Tooltip works", placement = "right", trigger = "hover", options = NULL)
-          
         )
       )
     })
@@ -396,6 +396,10 @@ server <- function(input, output, session) {
     v$groupsDF[-c(1,2,3)] <- lapply(v$groupsDF[-c(1,2,3)], factor)
     v$dataList_melted <- dataMelter(v$dataList, v$groupsDF, v$timeScale)
     
+    v$groupDF_subset <- cbind(
+      data.frame(Well = v$groupsDF[v$groupsDF$KeepWell == "Yes", "Wells"]), 
+      v$groupsDF[v$groupsDF$KeepWell == "Yes", v$conditions]
+    )
     
     if(is.null(v$dataList_melted)) {
       return()
@@ -438,7 +442,11 @@ server <- function(input, output, session) {
     output$downloadparams_df <- downloadHandler(
       function() {paste0(input$title, "_growthParameters.csv")},
       function(file) {
-        write.csv(v$params_list, file, row.names = FALSE)
+        df <- cbind(
+          v$groupDF_subset,
+          v$params_list
+        )
+        write.csv(df, file, row.names = FALSE)
       }
     )
     output$downloadparams_pdf <- downloadHandler(
@@ -504,15 +512,17 @@ server <- function(input, output, session) {
     output$growth_param_ui <- renderUI({
       fluidPage(
         list(
-          sliderInput('auc_window', 'Window range AUC [h]:', min=0, step=0.5, max=ceiling(max(v$timeScale)), value=c(0, ifelse(ceiling(max(v$timeScale)) > 6, 6, floor(max(v$timeScale))))),
-          selectInput('param_plot_selector', "Plot to display:", choices=c("Bar Plot", "Tile Plot", "Logistic Curves")),
-          selectInput('params_x_scale', 'X axis group:', choices=v$conditions, width='100%'),
-          selectInput('params_y_scale', 'Y axis group (Only for Tile Plot):', choices=v$conditions, width='100%'),
-          selectInput('param_selector', 'Parameter to display:', choices=c(names(v$params)), width='100%')
+          sliderInput('auc_window', 'Window range parameters [h]:', min=0, step=0.5, max=ceiling(max(v$timeScale)), value=c(0, ifelse(ceiling(max(v$timeScale)) > 6, 6, floor(max(v$timeScale))))),
+          selectInput('param_plot_selector', "Type of plot:", choices=c("Bar Plot", "Tile Plot", "Logistic Curves")),
+          selectInput('param_selector', 'Parameter to display:', choices=c(names(v$params)), width='100%'),
+          selectInput('params_x_scale', 'X axis:', choices=v$conditions, width='100%'),
+          selectInput('params_y_scale', 'Y axis (For Tile Plot):', choices=v$conditions, width='100%')
         )
       )
     })
   })
+  
+  
   
   
   ##### lvl Order Sorter #####
@@ -567,7 +577,7 @@ server <- function(input, output, session) {
   })
   
   toListenParams <- reactive({
-    list(v$groupsDF, input$plot_selector, input$auc_window)
+    list(v$groupsDF, input$plot_selector, input$auc_window, input$secPlotMethod)
   })
   
 
@@ -575,16 +585,23 @@ server <- function(input, output, session) {
   
   observeEvent(toListenParams(), {
     req(input$auc_window)
+
+    dt <- v$dataList
     
+    #If RLU/OD is selected, normalise the RLU table by OD table
+    if(!is.null(input$secPlotMethod) && input$secPlotMethod) {
+      dt[[input$plot_selector]] <- dt[[input$plot_selector]]/df[[1]]
+    }
     
-    v$params_list <- lapply(v$dataList, function(subTable) {
+  
+    
+    v$params_list <- lapply(dt, function(subTable) {
       subTable <- subTable[v$groupsDF$KeepWell == "Yes"]
-      
       data <- getLogisticParameters(v$timeScale, subTable, input$auc_window)[2:10]
-      sub <- cbind(data.frame(do.call(rbind, lapply(colnames(subTable), function(well) {
-          return(data.frame(Well=well, AUC=getAUC(v$timeScale, subTable[[well]], input$auc_window)))
-        }))), data, v$groupsDF[v$groupsDF$KeepWell == "Yes", v$conditions])
-      return(sub)
+      data$AUC <- getTrapezoidalAUC(v$timeScale, subTable, input$auc_window)
+      data$max_gr <- getMaxGr(v$timeScale, subTable, input$auc_window)
+      data$max_val <- getMaxVal(v$timeScale, subTable, input$auc_window)
+      return(data)
     })
     
     
@@ -596,12 +613,13 @@ server <- function(input, output, session) {
         downloadButton("downloadparams_eps", label = "Download Growth Parameters (EPS)")
       )
     })
+    df <- cbind(
+      v$groupDF_subset,
+      v$params_list[[input$plot_selector]]
+    )
     
-    
-    df <- v$params_list[[input$plot_selector]]
     dataOD <- cbind(data.frame(time=v$timeScale), v$dataList[[input$plot_selector]])
     dataOD <- dataOD[which(dataOD$time >= input$auc_window[1] & dataOD$time <= input$auc_window[2]),]
-
     output$params_plot <- renderPlot({
       if(input$param_plot_selector == "Bar Plot") {
         p_bar <- ggplot(df, aes_string(y=v$params[input$param_selector], x=input$params_x_scale))
@@ -615,7 +633,6 @@ server <- function(input, output, session) {
         if (input$fw != "None") {
           p_bar <- p_bar + facet_wrap(as.formula(paste("~", paste0(unlist(strsplit(input$fw,", ")), collapse="+"))), nrow = input$nRowsFacets)
         }
-        
         p_bar <- p_bar +
           stat_summary(geom="bar", fun = mean, position = "dodge", alpha = 0.3) +
           stat_summary(geom="errorbar", fun.data = mean_se, width = 0.3, position=position_dodge(0.9), colour="black") +
@@ -651,20 +668,23 @@ server <- function(input, output, session) {
           theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())
         v$p_bar <- p_tile
         return(p_tile)
-
         
         
         
         
       }else {
         ps <- do.call(grid.arrange, lapply(1:nrow(df), function(sample_index) {
+          cp <- "green"
+          if(df[sample_index, "note"] != "") {
+            cp <- "red"
+          }
           k <- df[sample_index, "k"]
           N0 <- df[sample_index, "n0"]
           r <- df[sample_index, "r"]
           currentWell <- df$Well[sample_index]
           p <- ggplot(dataOD, aes_string(x="time", y=sym(currentWell))) +
             geom_line(size=1.2) +
-            stat_function(fun = function(t) k / (1 + ((k - N0) / N0) * exp(-r * t)), col="red") +
+            stat_function(fun = function(t) k / (1 + ((k - N0) / N0) * exp(-r * t)), col=cp) +
             ylim(0, 1.15*max(dataOD[-1], na.rm=T)) +
             theme_classic() +
             annotate(geom = 'text', label = paste(" ", currentWell), x = -Inf, y = Inf, hjust = 0, vjust = 1) +
@@ -672,7 +692,7 @@ server <- function(input, output, session) {
                   axis.text=element_blank(),
                   axis.ticks=element_blank(),
                   panel.grid=element_blank())
-          
+
           return(p)
         }))
         v$p_bar <- ps
