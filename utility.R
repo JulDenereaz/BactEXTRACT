@@ -10,7 +10,7 @@ getFile <- function(datapath) {
     rawTableList[["OD"]] <- rawdata
     
   }else {
-    rawdata <-  as.data.frame(suppressMessages(read_excel(datapath, col_names = F)))
+    rawdata <- read.xlsx(file=datapath, sheetIndex=1, as.data.frame=T, header=F, skipEmptyRows=T)
     #rawTableList is a list containing each table, starting with OD, and any additional measurement table, such as RLU, luminescence, or another OD...
     indexStart <- which(rawdata=='Cycle Nr.')
     for (i in 1:length(indexStart)) {
@@ -20,13 +20,12 @@ getFile <- function(datapath) {
         subTableDF <- rawdata[indexStart[i]:indexStart[i+1]-1,]
       }
       #From the Tecan i-control software be default, the table is transposed (each row = one well, instead of one column = well and each row is one cycle)
-      if(grepl('Tecan i-control', rawdata)[1]) {
+      if(any(grepl('Tecan i-control', rawdata))) {
         subTableDF <- as.data.frame(t(subTableDF))
       }
       #Setting first row as colnames
       colnames(subTableDF) <- subTableDF[1,]
       subTableDF <- subTableDF[-c(1),]
-      
       #Removing non-numeric rows and columns
       subTableDF <- suppressWarnings(sapply(subTableDF, as.numeric))
       

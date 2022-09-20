@@ -29,6 +29,7 @@ source('plot.R', local = TRUE)
 library(ggplot2)
 library(gtable)
 library(grid)
+library(xlsx)
 
 
 
@@ -432,7 +433,7 @@ server <- function(input, output, session) {
       function(file){
         ggsave(file,plot=v$p, width=input$width, height=input$height, units="in", dpi=300, device=cairo_pdf)
       }
-    )    
+    )
     output$download_eps <- downloadHandler(
       function(){paste0(input$title,'.eps')},
       function(file){
@@ -541,6 +542,7 @@ server <- function(input, output, session) {
     output$plot <- renderPlot({
       v$customP
       req(input$yAxisRange)
+      req(input$lvlOrderSorted)
       
       
       df <- v$dataList_melted[[1]]
@@ -587,7 +589,7 @@ server <- function(input, output, session) {
     req(input$auc_window)
 
     dt <- v$dataList
-    
+  
     #If RLU/OD is selected, normalise the RLU table by OD table
     if(!is.null(input$secPlotMethod) && input$secPlotMethod) {
       dt[[input$plot_selector]] <- dt[[input$plot_selector]]/df[[1]]
@@ -620,6 +622,7 @@ server <- function(input, output, session) {
     
     dataOD <- cbind(data.frame(time=v$timeScale), v$dataList[[input$plot_selector]])
     dataOD <- dataOD[which(dataOD$time >= input$auc_window[1] & dataOD$time <= input$auc_window[2]),]
+    
     output$params_plot <- renderPlot({
       if(input$param_plot_selector == "Bar Plot") {
         p_bar <- ggplot(df, aes_string(y=v$params[input$param_selector], x=input$params_x_scale))
@@ -687,7 +690,7 @@ server <- function(input, output, session) {
             stat_function(fun = function(t) k / (1 + ((k - N0) / N0) * exp(-r * t)), col=cp) +
             ylim(0, 1.15*max(dataOD[-1], na.rm=T)) +
             theme_classic() +
-            annotate(geom = 'text', label = paste(" ", currentWell), x = -Inf, y = Inf, hjust = 0, vjust = 1) +
+            annotate(geom = 'text', label = paste(" ", currentWell), x = -Inf, y = Inf, hjust = 0, vjust = 1, col=cp) +
             theme(axis.title=element_blank(),
                   axis.text=element_blank(),
                   axis.ticks=element_blank(),
