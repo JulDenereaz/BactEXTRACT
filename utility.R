@@ -54,17 +54,16 @@ getDFlogticks <- function(fw, df, nrows, data) {
   if(sum(!duplicated(df_facets)) == 1) {
     return(data)
   }
-
-  
-  print("________________")
   tmp <- sapply(df_facets, levels)
-  if(ncol(df_facets) > 1) {
-    n <- max(lengths(tmp))
-    tmp <- lapply(tmp, `length<-`, n)
+  if(ncol(df_facets) >1) {
+    n <- max(length(tmp[[colnames(df_facets[1])]]), length(tmp[[colnames(df_facets[2])]]))
+    length(tmp[[colnames(df_facets[1])]]) <- n
+    length(tmp[[colnames(df_facets[2])]]) <- n
+    tmp <- as.data.frame(tmp)
   }
   df_levels <- expand.grid(rev(as.data.frame(tmp)))
   fin <- semi_join(df_levels, df_facets, by=facets)
-  df_final <- cbind(data.frame(x=NA), fin)[seq(1, nrow(fin), by=ceiling(nrow(fin)/nrows)),]
+  df_final <- cbind(data.frame(x=NA), fin)[seq(1, nrow(fin), by=ceiling((nrow(fin))/nrows)),]
   return(df_final)
 }
 
