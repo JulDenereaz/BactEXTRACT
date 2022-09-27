@@ -10,7 +10,7 @@ getFile <- function(datapath) {
     rawTableList[["OD"]] <- rawdata
     
   }else {
-    rawdata <- read.xlsx(file=datapath, sheetIndex=1, as.data.frame=T, header=F, skipEmptyRows=T)
+    rawdata <- read.xlsx(file=datapath, sheetIndex=1, as.data.frame=T, header=F)
     #rawTableList is a list containing each table, starting with OD, and any additional measurement table, such as RLU, luminescence, or another OD...
     indexStart <- which(rawdata=='Cycle Nr.')
     for (i in 1:length(indexStart)) {
@@ -28,7 +28,6 @@ getFile <- function(datapath) {
       subTableDF <- subTableDF[-c(1),]
       #Removing non-numeric rows and columns
       subTableDF <- suppressWarnings(sapply(subTableDF, as.numeric))
-      
       #removing columns or rows with only NA in it
       subTableDF <- subTableDF[, colSums(is.na(subTableDF)) != nrow(subTableDF)]
       subTableDF <- subTableDF[rowSums(is.na(subTableDF)) != ncol(subTableDF),]
