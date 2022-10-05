@@ -11,6 +11,7 @@ getFile <- function(datapath) {
     
   }else {
     rawdata <- read.xlsx(file=datapath, sheetIndex=1, as.data.frame=T, header=F)
+    # rawdata <- as.data.frame(read_excel(path=datapath, col_names = F,progress = T))
     #rawTableList is a list containing each table, starting with OD, and any additional measurement table, such as RLU, luminescence, or another OD...
     indexStart <- which(rawdata=='Cycle Nr.')
     for (i in 1:length(indexStart)) {
@@ -47,20 +48,27 @@ getFile <- function(datapath) {
   return(rawTableList)
 }
 
-getDFlogticks <- function(fw, df, nrows, data) {
+getDFlogticks <- function(fw, df, nrows, data, refcurve) {
   facets <- unlist(strsplit(fw,", "))
   df_facets <- df[which(colnames(df) %in% facets)]
   if(sum(!duplicated(df_facets)) == 1) {
     return(data)
   }
+
+  
   tmp <- sapply(df_facets, levels)
-  if(ncol(df_facets) >1) {
+  if(ncol(df_facets) > 1 & length(tmp[[1]]) != length(tmp[[2]])) {
     n <- max(length(tmp[[colnames(df_facets[1])]]), length(tmp[[colnames(df_facets[2])]]))
     length(tmp[[colnames(df_facets[1])]]) <- n
     length(tmp[[colnames(df_facets[2])]]) <- n
-    tmp <- as.data.frame(tmp)
   }
-  df_levels <- expand.grid(rev(as.data.frame(tmp)))
+  tmp <- as.data.frame(tmp)
+  if(refcurve != "None") {
+    tmp <- tmp %>% filter(.data[[facets]] != refcurve)
+    tmp <- droplevels(tmp)
+  } 
+  df_levels <- expand.grid(rev(tmp))
+  
   fin <- semi_join(df_levels, df_facets, by=facets)
   df_final <- cbind(data.frame(x=NA), fin)[seq(1, nrow(fin), by=ceiling((nrow(fin))/nrows)),]
   return(df_final)

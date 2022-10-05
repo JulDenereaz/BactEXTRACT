@@ -91,7 +91,7 @@ makePlot <- function(dfRaw, input, customP, ylabel="", od = T, dfSecRaw = NULL) 
       
       if (input$fw != "None" & !is.null(input$nRowsFacets)) {
         a <- annotation_logticks( sides = "l", size = input$size/25, colour="black", outside=T, mid=unit(0.3, "cm"), long=unit(0.4, "cm"), short=unit(0.2, "cm"))
-        a$data <- getDFlogticks(input$fw, df, input$nRowsFacets, a$data)
+        a$data <- getDFlogticks(input$fw, df, input$nRowsFacets, a$data, input$referenceCurve)
         p <- p + a
       }else {
         p <- p + annotation_logticks( sides = "l", size = input$size/25, colour="black", outside=T, mid=unit(0.3, "cm"), long=unit(0.4, "cm"), short=unit(0.2, "cm"))
