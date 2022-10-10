@@ -25,7 +25,6 @@ library(tidyr)
 source('utility.R', local = TRUE)
 source('plot.R', local = TRUE)
 
-
 library(ggplot2)
 library(gtable)
 library(grid)
@@ -529,6 +528,7 @@ server <- function(input, output, session) {
   ##### lvl Order Sorter #####
   observeEvent(input$lvlOrderSorted, {
     v$groupsDF[input$lvlOrderSelect] <- factor(v$groupsDF[[input$lvlOrderSelect]], levels = c(input$lvlOrderSorted))
+    v$groupDF_subset[input$lvlOrderSelect] <- factor(v$groupDF_subset[[input$lvlOrderSelect]], levels = c(input$lvlOrderSorted))
     
     #update dataframes levels based on level order
     v$dataList_melted <- lapply(v$dataList_melted, function(df) {
@@ -544,10 +544,10 @@ server <- function(input, output, session) {
       req(input$yAxisRange)
       req(input$lvlOrderSorted)
       
+      # return(plot_exception("sorry, no data is found."))
       
       df <- v$dataList_melted[[1]]
       pOD <- makePlot(df, input, isolate(v$customP), od=T)
-      
       
       if(!is.null(input$secPlotDisplay) && input$plot_selector != v$subTableNames[[1]]) {
         dfSec <- v$dataList_melted[[input$plot_selector]]
