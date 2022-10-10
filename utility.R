@@ -10,18 +10,30 @@ getFile <- function(datapath) {
     rawTableList[["OD"]] <- rawdata
     
   }else {
-    rawdata <- read.xlsx(file=datapath, sheetIndex=1, as.data.frame=T, header=F)
+    rawdata <- read.xlsx2(file=datapath, sheetIndex=1, as.data.frame=T, header=F, colIndex = 1:400, colClasses = "character")
     # rawdata <- as.data.frame(read_excel(path=datapath, col_names = F,progress = T))
     #rawTableList is a list containing each table, starting with OD, and any additional measurement table, such as RLU, luminescence, or another OD...
-    indexStart <- which(rawdata=='Cycle Nr.')
+    #If tecan is biotek
+    biotek <- F
+    if(any(grepl("Synergy", rawdata))) {
+      #First column empty in synergy software => might wanna double check that
+      indexStart <- which(rawdata[-1]=='Time')
+      indexStop <- which(rawdata == "Results")
+      
+      rawdata <- rawdata[1:indexStop,]
+      biotek <- T
+    }else {
+      indexStart <- which(rawdata=='Cycle Nr.')
+    }
+    
     for (i in 1:length(indexStart)) {
       if(i == length(indexStart)) {
         subTableDF <- rawdata[indexStart[i]:nrow(rawdata),]
       }else {
         subTableDF <- rawdata[indexStart[i]:indexStart[i+1]-1,]
       }
-      #From the Tecan i-control software be default, the table is transposed (each row = one well, instead of one column = well and each row is one cycle)
-      if(any(grepl('Tecan i-control', rawdata))) {
+      #If Time is below Cycle, that means each row is a well, hence we need to translate the table to make each column = one well
+      if(!biotek & grepl("Time", rawdata[indexStart[i]+1,1])) {
         subTableDF <- as.data.frame(t(subTableDF))
       }
       #Setting first row as colnames
@@ -34,10 +46,15 @@ getFile <- function(datapath) {
       subTableDF <- subTableDF[rowSums(is.na(subTableDF)) != ncol(subTableDF),]
       #Removing Temp and Cycle columns
       rawTableList$time <- subTableDF[, grep("Time", colnames(subTableDF))]/3600
-      subTableDF <- subTableDF[, -grep("Temp|Time|Cycle", colnames(subTableDF))]
+      if(biotek) {
+        rawTableList$time <- rawTableList$time*86400
+      }
+      subTableDF <- subTableDF[, -grep("Temp|Time|Cycle|T..", colnames(subTableDF))]
       
       name <- rawdata[indexStart[i]-1,1]
-      if(is.na(name)) {
+      print(indexStart)
+      print(name)
+      if(is.na(name) | name == "") {
         name <- ifelse(i == 1, "OD", i)
       }
       
@@ -45,6 +62,7 @@ getFile <- function(datapath) {
       rawTableList[[name]] <- as.data.frame(subTableDF)
     }
   }
+  View(rawTableList)
   return(rawTableList)
 }
 
@@ -134,8 +152,6 @@ aggrTech <- function(dataList, N, horiz=T, multiF=F) {
 
 
 dataMelter <- function(dataList, groups, time) {
-  
-
   groups <- groups[groups$KeepWell == "Yes",]
   if(nrow(groups) == 0) {
     return(NULL)
@@ -334,7 +350,28 @@ getMaxGr <- function(timeCol, plate, range) {
   
 }
 
-
+plot_exception <-function(
+    ...,
+    sep=" ",
+    type=c("message","warning","cat","print"),
+    color="auto",
+    console=TRUE,
+    size = 6){      
+  type=match.arg(type)
+  txt = paste(...,collapse=sep)
+  if(console){
+    if(type == "message") message(txt)
+    if(type == "warning") warning(txt)
+    if(type == "cat") cat(txt)
+    if(type == "print") print(txt)
+  }
+  if(color =="auto") color <- if(type == "cat") "black" else "red"
+  if(txt == "warning") txt <- paste("warning:",txt)
+  print(ggplot2::ggplot() +
+          ggplot2::geom_text(ggplot2::aes(x=0,y=0,label=txt),color=color,size=size) + 
+          ggplot2::theme_void())
+  invisible(NULL)
+}
 
 
 getLogisticParameters <- function(timeCol, plate, range) {
