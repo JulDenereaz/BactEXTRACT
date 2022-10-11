@@ -3,25 +3,6 @@ makePlot <- function(dfRaw, input, customP, ylabel="", od = T, dfSecRaw = NULL) 
   # getting upper, lower bound from SE, and calculate log10 if necessary
   df <- getUpLo(dfRaw, input$logScale && od)
   
-  # #Determining coefficient
-  # if(!is.null(dfSecRaw)) {
-  #   name <- input$plot_selector
-  #   dfSec <- getUpLo(dfSecRaw, log=F)
-  #   dfSec <- dfSec[(ncol(dfSec)-3):ncol(dfSec)]
-  #   coeff <- max(dfSec$value)/max(dfRaw$value)
-  #   if(input$logScale) {
-  #     dfSec$value <- log10(dfSec$value/coeff)
-  #     dfSec$Upper <- log10(dfSec$Upper/coeff)
-  #     dfSec$Lower <- log10(dfSec$Lower/coeff)
-  #   }else {
-  #     dfSec$value <- dfSec$value/coeff
-  #     dfSec$Upper <- dfSec$Upper/coeff
-  #     dfSec$Lower <- dfSec$Lower/coeff
-  #   }
-  #   colnames(dfSec) <- paste0(name, ".", colnames(dfSec))
-  #   df <- cbind(df, dfSec)
-  # }
-  
   
   if(!is.null(input$referenceCurve) && input$referenceCurve != "None") {
     df <- addReferenceCurve(input$referenceCurve, input$fw, df)
@@ -29,8 +10,7 @@ makePlot <- function(dfRaw, input, customP, ylabel="", od = T, dfSecRaw = NULL) 
     #   dfSec <- addReferenceCurve(input$referenceCurve, input$fw, dfSec)
     # }
   }
-  
-  
+
   p <- ggplot(data=df, aes_string(x="time", y="value"))
   
   
@@ -91,6 +71,7 @@ makePlot <- function(dfRaw, input, customP, ylabel="", od = T, dfSecRaw = NULL) 
       
       if (input$fw != "None" & !is.null(input$nRowsFacets)) {
         a <- annotation_logticks( sides = "l", size = input$size/25, colour="black", outside=T, mid=unit(0.3, "cm"), long=unit(0.4, "cm"), short=unit(0.2, "cm"))
+        
         a$data <- getDFlogticks(input$fw, df, input$nRowsFacets, a$data, input$referenceCurve)
         p <- p + a
       }else {

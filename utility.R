@@ -10,7 +10,7 @@ getFile <- function(datapath) {
     rawTableList[["OD"]] <- rawdata
     
   }else {
-    rawdata <- read.xlsx2(file=datapath, sheetIndex=1, as.data.frame=T, header=F, colIndex = 1:400, colClasses = "character")
+    rawdata <- read.xlsx2(file=datapath, sheetIndex=1, as.data.frame=T, header=F, colIndex = 1:300)
     # rawdata <- as.data.frame(read_excel(path=datapath, col_names = F,progress = T))
     #rawTableList is a list containing each table, starting with OD, and any additional measurement table, such as RLU, luminescence, or another OD...
     #If tecan is biotek
@@ -52,8 +52,6 @@ getFile <- function(datapath) {
       subTableDF <- subTableDF[, -grep("Temp|Time|Cycle|T..", colnames(subTableDF))]
       
       name <- rawdata[indexStart[i]-1,1]
-      print(indexStart)
-      print(name)
       if(is.na(name) | name == "") {
         name <- ifelse(i == 1, "OD", i)
       }
@@ -62,18 +60,20 @@ getFile <- function(datapath) {
       rawTableList[[name]] <- as.data.frame(subTableDF)
     }
   }
-  View(rawTableList)
   return(rawTableList)
 }
 
 getDFlogticks <- function(fw, df, nrows, data, refcurve) {
-  facets <- unlist(strsplit(fw,", "))
+  if(refcurve != "None") {
+    facets <- c("facetRef")
+  }else {
+    facets <- unlist(strsplit(fw,", "))
+  }
+  
   df_facets <- df[which(colnames(df) %in% facets)]
   if(sum(!duplicated(df_facets)) == 1) {
     return(data)
   }
-
-  
   tmp <- sapply(df_facets, levels)
   if(ncol(df_facets) > 1 & length(tmp[[1]]) != length(tmp[[2]])) {
     n <- max(length(tmp[[colnames(df_facets[1])]]), length(tmp[[colnames(df_facets[2])]]))
@@ -81,14 +81,11 @@ getDFlogticks <- function(fw, df, nrows, data, refcurve) {
     length(tmp[[colnames(df_facets[2])]]) <- n
   }
   tmp <- as.data.frame(tmp)
-  if(refcurve != "None") {
-    tmp <- tmp %>% filter(.data[[facets]] != refcurve)
-    tmp <- droplevels(tmp)
-  } 
   df_levels <- expand.grid(rev(tmp))
   
   fin <- semi_join(df_levels, df_facets, by=facets)
   df_final <- cbind(data.frame(x=NA), fin)[seq(1, nrow(fin), by=ceiling((nrow(fin))/nrows)),]
+  
   return(df_final)
 }
 
@@ -228,6 +225,7 @@ addReferenceCurve <- function(refLevel, fw, df) {
     }
   }))
   newDF <- rbind(newDF, ref_df)
+  # newDF[fw] <- newDF$facetRef
   return(newDF)
 }
 
