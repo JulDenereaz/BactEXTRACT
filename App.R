@@ -77,7 +77,7 @@ ui = dashboardPage(
           height='calc(calc(100vh - 140px)/2)',
           tabPanel(
             'Settings', 
-            div(style = 'overflow-y:auto;height:calc(calc(100vh - 260px)/2)', 
+            div(style = 'overflow-y:auto;height:calc(calc(100vh - 280px)/2)', 
                 uiOutput("graph_options")
             )
           ),
@@ -395,11 +395,9 @@ server <- function(input, output, session) {
     v$groupsDF <- data.frame(hot_to_r(input$groups))
     v$groupsDF[-c(1,2,3)] <- lapply(v$groupsDF[-c(1,2,3)], factor)
     v$dataList_melted <- dataMelter(v$dataList, v$groupsDF, v$timeScale)
+
+    v$groupDF_subset <- v$groupsDF[v$groupsDF$KeepWell=="Yes", -which(names(v$groupsDF) =="Preview")]
     
-    v$groupDF_subset <- cbind(
-      data.frame(Well = v$groupsDF[v$groupsDF$KeepWell == "Yes", "Wells"]), 
-      v$groupsDF[v$groupsDF$KeepWell == "Yes", v$conditions]
-    )
     
     if(is.null(v$dataList_melted)) {
       return()
@@ -627,6 +625,7 @@ server <- function(input, output, session) {
       if(input$param_plot_selector == "Bar Plot") {
         p_bar <- ggplot(df, aes_string(y=v$params[input$param_selector], x=input$params_x_scale))
         if(input$color != 'None') {
+          print(unlist(strsplit(input$color,", ")))
           x <- nrow(unique(df[unlist(strsplit(input$color,", "))]))
           p_bar <- p_bar + aes_string(col=paste0("interaction(", paste0(unlist(strsplit(input$color,", ")), collapse=", "),")"),
                               fill=paste0("interaction(", paste0(unlist(strsplit(input$color,", ")), collapse=", "),")")) +
