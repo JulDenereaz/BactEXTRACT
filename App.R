@@ -1,56 +1,61 @@
-library(growthcurver)
-library(shinydashboard)
-library(shinyWidgets)
-library(shiny) 
-library(readxl) 
-library(tools)
-library(stringr) 
-library(ggplot2)
-library(rhandsontable) 
-library(reshape2) 
-library(dplyr)
-library(lemon) 
-library(scales) 
-library(esquisse) 
-library(gridExtra)
-library(ggpubr)
-library(parallel)
-library(Cairo)
-library(sortable)
-library(shinythemes)
-library(RColorBrewer)
-library(shinyStore)
-library(shinyBS)
-library(tidyr)
-source('utility.R', local = TRUE)
-source('plot.R', local = TRUE)
-
 library(ggplot2)
 library(gtable)
+library(ggpubr)
 library(grid)
+library(gridExtra)
+library(growthcurver)
+library(shiny) 
+library(shinythemes)
+library(shinyStore)
+library(shinydashboard)
+library(shinyWidgets)
+library(shinyBS)
+library(sortable)
+library(esquisse) 
+library(tools)
+library(rhandsontable) 
+library(stringr) 
+library(dplyr)
+library(tidyr)
+library(reshape2) 
+library(lemon) 
+library(scales) 
+library(RColorBrewer)
+library(parallel)
+library(Cairo)
+library(jsonlite)
 library(xlsx)
-
+source('utility.R', local = TRUE)
+source('plot.R', local = TRUE)
 
 
 version <- "0.1"
 
-
 ##### UI #####
-ui = dashboardPage(
+ui <- dashboardPage(
   dashboardHeader(title = "BactEXTRACT"),
   dashboardSidebar(
+    fluidPage(
+      list(
+        h3('Uploads :')
+      )
+    ),
     fileInput("files", "Choose TECAN Excel File",
               multiple = TRUE,
               accept = c(".xlsx", ".txt")),
+    fileInput("file_settings", "Choose Settings File",
+              multiple = FALSE,
+              accept = c(".json")),
     
     initStore("localStorage", "BactEXTRACT_storage"),
+    uiOutput("downloads"),
     
-    div(style="height:calc(100vh - 250px);",
+    div(style="height:130vh;",
         width=12,
-        uiOutput("multifiles_options"),
-        uiOutput("options")
+        
     ),
-    tags$hr(style='margin-bottom:5px'),
+    
+    tags$hr(style='margin-bottom:0px'),
     column(
       width=12,
       align="center", 
@@ -60,72 +65,66 @@ ui = dashboardPage(
     
   ),
   dashboardBody(
-    tags$style(type = "text/css", "#map {height: calc(100vh - 80px) !important;}"),
+    tags$style(type = "text/css", "#map {height: calc(120vh - 80px) !important;}"),
     tags$style(HTML('.shiny-split-layout>div {overflow: visible;}')),
     fluidRow(
       column(
         width=12,
-        box(
-          height='calc(calc(100vh - 140px)/2)',
-          width=6,
-          title="Group design",
-          status = 'primary',
-          rHandsontableOutput("groups", height = 'calc(calc(100vh - 280px)/2)')
-        ),
-        tabBox(
-          width=6,
-          height='calc(calc(100vh - 140px)/2)',
-          tabPanel(
-            'Settings', 
-            div(style = 'overflow-y:auto;height:calc(calc(100vh - 280px)/2)', 
-                uiOutput("graph_options")
-            )
-          ),
-          tabPanel(
-            'Downloads',
-            uiOutput("downloads"),
-            
-          ),
-          tabPanel(
-            'Uploads',
-            uiOutput("uploads"),
-            
-          )
-        )
-      ),
-      column(
-        width=12,
-        tabBox(
-          width=12,
-          title="Plots",
-          height = 'calc(calc(100vh - 110px)/2)',
-          tabPanel(
-            'Growth Plot', 
-            plotOutput('plot')
-          ),
-          tabPanel(
-            'Growth parameters',
-            column(
-              width=2,
-              uiOutput("growth_param_ui")
+        fluidRow(
+          column(
+            width=9,
+            style="padding-left: 0px;padding-right: 0px;",
+            box(
+              height='50vh',
+              width=3,
+              title="1. Settings",
+              status = 'primary',
+              div(style = 'overflow:auto;height:calc(50vh - 60px)',
+                  uiOutput("conditionsUI")
+              )
             ),
-            
-            column(
+            box(
+              height='50vh',
               width=5,
-              plotOutput('params_plot')              
+              title="2. Groups Design",
+              # title=p("Groups Design", 
+              #         actionButton("processGrou", "Apply Modifications", icon = icon("refresh"),
+              #                      class = "btn-xs", title = "Update")),
+              status = 'primary',
+              rHandsontableOutput("groups", height = 'calc(50vh - 60px)')
+            ),
+            box(
+              height='50vh',
+              width=4,
+              title="3. Plot Settings",
+              status = 'primary',
+              div(style = 'overflow:auto;height:calc(50vh - 60px)',
+                  uiOutput("graph_optionsUI")
+              )
+            ),
+            box(
+              width=12,
+              title="5. Plots",
+              status = 'primary',
+              height = '100vh',
+              div(
+                style="overflow-x:auto;height:100%;",
+                plotOutput('plot', height="100%")
+                
+              )
             )
-          # ),
-          # tabPanel(
-          #   'GrowthCurver', 
-          #   column(
-          #     width=2,
-          #     uiOutput('growthcurverUI')
-          #   ),
-          #   
-          #   column(
-          #     width=5,
-          #     plotOutput('growthcurverPlotUI')              
-          #   )
+          ),
+          column(
+            width=3,
+            box(
+              height='93vh',
+              width=16,
+              title="4. Visual Settings",
+              status = 'primary',
+              div(style = 'overflow:auto;height:calc(calc(200vh - 280px)/2)',
+                  uiOutput("themeUI"),
+              )
+            )
           )
         )
       )
@@ -136,15 +135,9 @@ ui = dashboardPage(
 
 
 
-
-
-
 ##### Server function #####
 server <- function(input, output, session) {
   v <- reactiveValues()
-  toListen2 <- reactive({
-    list(input$norm,input$norm_baseOD, input$files)
-  })
   
   v$params <- c(
     "Empirical AUC"="auc_e",
@@ -163,29 +156,32 @@ server <- function(input, output, session) {
   
   observeEvent(input$files, {
     req(input$files)
-    output$options <- renderUI({
+    output$conditionsUI <- renderUI({
       fluidPage(
         list(
+          splitLayout(
+            selectInput('techAggr', 'Tech. Repl. Merging:', choices=c("None", "Horizontal", "Vertical")),
+            numericInput('techAggrN', 'By:', value=3, min=2)
+          ),
+          splitLayout(
+            selectInput('norm', 'OD Normalisation:', choices=c('Mininum', '1st well', 'Min(wells 1-2-3)', 'Specific Well(s)', "No Normalisation")),
+            selectInput('norm_baseOD', 'Base OD:', choices=c(0, 0.001, 0.002, 0.003, 0.004), selected = 0.001),
+          ),
+          uiOutput('normByWellsUI'),
           tags$hr(),
-          h3('Options :'),
-          selectInput('norm', 'OD Normalisation :', choices=c('Mininum', '1st value', 'Min(wells 1-2-3)', "No Normalisation")),
-          selectInput('norm_baseOD', 'Base OD', choices=c(0, 0.001, 0.002, 0.003, 0.004), selected = 0.001),
-          selectInput('techAggr', 'Tech. Repl. Merging:', choices=c("None", "Horizontal", "Vertical")),
-          uiOutput('techAggrUI'),
-          tags$hr(style='margin-bottom:5px'),
-          textInput('conditionsUI_Input', 'Enter Conditions:', value=paste(input$localStorage$cond, collapse = ","), placeholder = "Strain, Treatment, ..."),
-          uiOutput('error_condition'),
-          column(12, align="center", p('(Cannot start with number, separated by coma)')),     
-          column(12, align="center", actionButton('updateCond', 'Update')),
-          bsTooltip("conditionsUI_Input", "Tooltip works", placement = "right", trigger = "hover", options = NULL)
+          HTML("<b>Enter Conditions:</b>"),
+          textInput('conditionsUI_Input', NULL, value=paste(input$localStorage$cond, collapse = ","), placeholder = "Strain, Treatment, ..."),
+          bsTooltip("conditionsUI_Input", "Tooltip works", placement = "bottom", trigger = "hover", options = NULL),
+          actionButton("updateCond", "Apply Modifications", icon = icon("gears"),class = "btn-xl", title = "Update")
+          # column(12, align="center", p('(Cannot start with number, separated by coma)')),     
         )
       )
     })
     if(!is.null(v$rawdata_list)) {
-      lapply(react, function(reactVal){
-        v[[reactVal]] <- NULL
-      })
-      output$graph_options <- NULL
+      # lapply(react, function(reactVal){
+      #   v[[reactVal]] <- NULL
+      # })
+      output$graph_optionsUI <- NULL
       output$plot <- NULL
       output$downloads <- NULL
       output$groups <- NULL
@@ -215,25 +211,49 @@ server <- function(input, output, session) {
         return(df)
       }))
     }
-    #Changing the name of the standard OD to OD. The rest will stay custom, as it can be RLU/Luminescence etc...
+    # showNotification('Files successfully uploaded', type='message')
+    
     
   })
   
-  observeEvent(input$techAggr , {
-    if(input$techAggr != "None"){
-      output$techAggrUI <- renderUI({
-        list(
-          numericInput('techAggrN', 'By:', value=3, min=2)
-        )
-      })
+  observeEvent(input$file_settings, {
+    print(fromJSON(input$file_settings$datapath))
+  })
+  
+  
+  
+  
+  toListenNormMerge <- reactive({
+    list(input$techAggr, input$norm)
+  })
+  
+  
+  observeEvent(toListenNormMerge(), {
+    req(input$norm)
+    req(input$techAggr)
+    v <- names(v$rawdata_list[[1]])
+    if(input$techAggr != "None") {
+      v <- aggrTechV(v, input$techAggrN, input$techAggr=="Horizontal", multiF = tools::file_path_sans_ext(input$files$name))
     }else {
       output$techAggrUI <- NULL
+    }
+    if(input$norm == "Specific Well(s)") {
+
+      output$normByWellsUI <- renderUI({
+        selectInput('normByWells', label="Wells to use for normalisation:", multiple = T, choices = v)
+      })
+      
+    }else{
+      output$normByWellsUI <- NULL
     }
   })
   
   
+
+  
   ##### Update button Panel #####
   observeEvent(input$updateCond, {
+    
     req(input$conditionsUI_Input)
     v$conditions <- formartConditions(input$conditionsUI_Input)
     
@@ -264,8 +284,8 @@ server <- function(input, output, session) {
     
     #normalization
     v$dataList <- aggdata_list
+    v$dataList[[1]] = normalize(isolate(v$dataList[[1]]), input$norm, input$norm_baseOD, input$normByWells)
     
-    v$dataList[[1]] = normalize(isolate(v$dataList[[1]]), input$norm, input$norm_baseOD)
     updateStore(session, name = "cond", value = v$conditions)
     
     #SapLine to preview the growth curve of each well
@@ -274,6 +294,7 @@ server <- function(input, output, session) {
       req(v$groups)
       rhandsontable(
         data.frame(v$groups), 
+        rowHeaders=NULL,
         fillHandle = list(direction='vertical', autoInsertRow=FALSE),
         maxRows = ncol(isolate(v$dataList[[1]])),
         useTypes=T) %>%
@@ -283,16 +304,23 @@ server <- function(input, output, session) {
         hot_table(highlightCol = T, highlightRow = T, allowRowEdit =F)
     })
     #To add: from local storage update
-    
-    
+
     
     ##### UI graph options #####
-    output$graph_options <- renderUI({
+    output$graph_optionsUI <- renderUI({
       fluidPage(
         list(
           splitLayout(
+            selectInput('type_plot_selector', 'Type of plot:', choices =  c("Growth Plot", "Bar Plot", "Checker Plot", "Logistic Curves"), width='100%'),
+            selectInput('data_selector', 'Data to display:', choices = names(v$dataList), width='100%'),
+            
+          ),
+          uiOutput("sec_plot_type_UI"),
+          tags$hr(),
+          splitLayout(
             column(
               width=12,
+              style="padding-left: 0px;padding-right: 0px;",
               selectInput('color', 'Color:', choices=c("None", v$conditions, v$interactions), selected = v$conditions[1], width='100%'),
               selectInput('linetype', 'Linetype:', choices=c("None", v$conditions), width='100%'),
               selectInput('shape', 'Shape:', choices=c("None", v$conditions), width='100%'),
@@ -301,19 +329,28 @@ server <- function(input, output, session) {
               uiOutput("refCurveUI")
             ),
             column(
-              width=12,
-              selectInput('plot_selector', 'Plot to display:', choices = names(v$dataList), width='100%'),
-              uiOutput("comparisonMethod"),
+              width=12,              
+              style="padding-left: 0px;padding-right: 0px;",
               selectInput('se', 'Standart Error Style:', choices=c("None", "Line Range", "Ribbon"), width='100%'),
-              
               selectInput('lvlOrderSelect', "Order Levels:", choices = c(v$conditions), width='100%'),
               uiOutput("levelOrderUI", width='100%')
             )
-          ),          
+          ),
           tags$hr(),
+          selectInput('param_selector', 'Parameter to display:', choices=c(names(v$params)), width='100%'),
+          sliderInput('auc_window', 'Window range parameters [h]:', min=0, step=0.5, max=ceiling(max(v$timeScale)), value=c(0, ifelse(ceiling(max(v$timeScale)) > 6, 6, floor(max(v$timeScale)))))
+          # actionButton('calculateParameters', "Calculate Growth Parameters", icon = icon("calculator"))
+        )
+      )
+    })
+
+    output$themeUI <- renderUI({
+      fluidPage(
+        list(
           splitLayout(
             column(
               width=12,
+              style="padding-left: 0px;padding-right: 0px;",
               tags$label("Choose a Palette:"),
               palettePicker(
                 width="100%",
@@ -329,15 +366,23 @@ server <- function(input, output, session) {
           ),
           splitLayout(
             numericInput('height', 'Height (Inches):', value=5, min = 4, max = 50, step = 1),
-            numericInput('width', 'Width: (Inches)', value=10, min = 4, max = 22, step = 1),
-            checkboxInput('logScale', 'Log10 Transformation', value = T)
+            numericInput('width', 'Width: (Inches)', value=10, min = 4, max = 50, step = 1),
             
           ),
+          tags$hr(),
           splitLayout(
-            sliderInput('range', 'X axis range:', min=0, step=0.5, max=ceiling(max(v$timeScale)), value=c(0, ceiling(max(v$timeScale)))),
-            uiOutput("logScaleUI")
-            
+            textInput('y_axis_title', "X axis Title:"),
+            selectInput('params_x_scale', 'X axis selector:', choices=v$conditions, width='100%'),
           ),
+          sliderInput('range', 'X axis range:', min=0, step=0.5, max=ceiling(max(v$timeScale)), value=c(0, ceiling(max(v$timeScale)))),
+          tags$hr(),
+          splitLayout(
+            textInput('y_axis_title', "Y axis Title:"),
+            selectInput('params_y_scale', 'Y axis selector:', choices=v$conditions, width='100%'),
+          ),
+          checkboxInput('logScale', 'Log10 Transformation', value = T),
+          uiOutput("logScaleUI"),
+          tags$hr(),
           splitLayout(
             sliderInput('size_l', 'Line Size:', min=0, max=4, value=1.2, step = 0.1),
             sliderInput('size_p', 'Point Size:', min=0, max=4, value=2.5, step = 0.1),
@@ -358,23 +403,20 @@ server <- function(input, output, session) {
     
   })
   
-  observeEvent(input$plot_selector, {
-    if(input$plot_selector != v$subTableNames[1]) {
-      output$comparisonMethod <- renderUI({
+  observeEvent(input$data_selector, {
+    if(input$data_selector != v$subTableNames[1]) {
+      output$sec_plot_type_UI <- renderUI({
         list(
-          splitLayout(
-            checkboxInput('secPlotMethod', paste(input$plot_selector, '/', v$subTableNames[1]), value = F, width='100%'),
-            selectInput('secPlotDisplay', "Display:", choices = c("Single", "Dual", "Combined"), width="100%")
-            # checkboxInput('secPlotDisplay', paste0('Dual with', v$subTableNames[[1]]), value = F, width='100%'),
-            # checkboxInput('secAxis', "Sec. Y Axis", value = F, width='100%')
-            
-          )
+          checkboxInput('secPlotMethod', paste(input$data_selector, '/', v$subTableNames[1]), value = F, width='100%'),
+          checkboxInput('secPlotDisplay', paste("Display both ", input$data_selector, ' and ', v$subTableNames[1], 'plots'), value = F, width='100%')
         )
       })
     }else {
-      output$comparisonMethod <- NULL
+      output$sec_plot_type_UI <- NULL
     }
   })
+  
+
   
   
   observeEvent(input$customColorPalette, {
@@ -394,6 +436,7 @@ server <- function(input, output, session) {
     
     v$groupsDF <- data.frame(hot_to_r(input$groups))
     v$groupsDF[-c(1,2,3)] <- lapply(v$groupsDF[-c(1,2,3)], factor)
+    
     v$dataList_melted <- dataMelter(v$dataList, v$groupsDF, v$timeScale)
 
     v$groupDF_subset <- v$groupsDF[v$groupsDF$KeepWell=="Yes", -which(names(v$groupsDF) =="Preview")]
@@ -406,15 +449,19 @@ server <- function(input, output, session) {
     ##### Downloads #####
     output$downloads <- renderUI({
       list(
-        column(12, align="center",
+        column(12, 
+               # align="center",
                tags$hr(),
+               h3("Downloads :"),
                tags$style(".skin-blue .sidebar a { color: #444; }"),
-               downloadButton("download_df", label = "Download Full Data"),
+               downloadButton("download_df", label = "Growth Data"),
+               downloadButton("downloadparams_df", label = "Growth Parameters Data"),
+               tags$p(""),               
+               downloadButton("download_settings", label = "Settings"),
                tags$p(""),
-               downloadButton("download_pdf", label = "Download Growth Plot (PDF)"),
-               downloadButton("download_eps", label = "Download Growth Plot (EPS)"),
+               downloadButton("download_pdf", label = "Plot (PDF)"),
+               downloadButton("download_eps", label = "Plot (EPS)"),
                tags$hr(),
-               uiOutput('downloadUI_params')
 
         )
       )
@@ -423,6 +470,13 @@ server <- function(input, output, session) {
       function() {paste0(input$title, "_growthData.csv")},
       function(file) {
         write.csv(v$dataList_melted, file, row.names = FALSE)
+      }
+    )
+    output$download_settings <- downloadHandler(
+      function() {paste0(input$title, "_settings.json")},
+      function(file) {
+        # write.csv(input$localStorage, file, row.names = FALSE)
+        writeLines(jsonlite::toJSON(input$localStorage), file)
       }
     )
     output$download_pdf <- downloadHandler(
@@ -441,25 +495,12 @@ server <- function(input, output, session) {
       function() {paste0(input$title, "_growthParameters.csv")},
       function(file) {
         df <- cbind(
-          v$groupDF_subset,
+          v$groupDF_subset[-which(names(v$groupDF_subset) == "KeepWell")],
           v$params_list
         )
         write.csv(df, file, row.names = FALSE)
       }
     )
-    output$downloadparams_pdf <- downloadHandler(
-      function(){paste(input$title, "_", input$param_selector, '.pdf',sep='')},
-      function(file){
-        ggsave(file,plot=v$p_bar, width=input$width, height=input$height, units="in", dpi=300, device=cairo_pdf)
-      }
-    )
-    output$downloadparams_eps <- downloadHandler(
-      function(){paste0(input$title,'.eps')},
-      function(file){
-        ggsave(file,plot=v$p_bar, width=input$width, height=input$height, units="in", dpi=300, device=cairo_ps)
-      }
-    )
-    
     
     ##### LevelOrder UI #####
     output$levelOrderUI <- renderUI({
@@ -494,7 +535,7 @@ server <- function(input, output, session) {
       if(input$logScale) {
         output$logScaleUI <- renderUI({
           list(
-            sliderTextInput('yAxisRange', 'Y axis range:', choices = c(0.001, 0.01, 0.1, 1, 10), selected =c(0.001, 1),  grid=T)
+            sliderTextInput('yAxisRange', 'Y axis range:', choices = c(0.0001, 0.001, 0.01, 0.1, 1, 10), selected =c(0.001, 1),  grid=T)
           )
         })
       }else {
@@ -505,19 +546,6 @@ server <- function(input, output, session) {
         })
       }
     })
-    
-    ##### Growth Parameters UI #####
-    output$growth_param_ui <- renderUI({
-      fluidPage(
-        list(
-          sliderInput('auc_window', 'Window range parameters [h]:', min=0, step=0.5, max=ceiling(max(v$timeScale)), value=c(0, ifelse(ceiling(max(v$timeScale)) > 6, 6, floor(max(v$timeScale))))),
-          selectInput('param_plot_selector', "Type of plot:", choices=c("Bar Plot", "Tile Plot", "Logistic Curves")),
-          selectInput('param_selector', 'Parameter to display:', choices=c(names(v$params)), width='100%'),
-          selectInput('params_x_scale', 'X axis:', choices=v$conditions, width='100%'),
-          selectInput('params_y_scale', 'Y axis (For Tile Plot):', choices=v$conditions, width='100%')
-        )
-      )
-    })
   })
   
   
@@ -527,7 +555,6 @@ server <- function(input, output, session) {
   observeEvent(input$lvlOrderSorted, {
     v$groupsDF[input$lvlOrderSelect] <- factor(v$groupsDF[[input$lvlOrderSelect]], levels = c(input$lvlOrderSorted))
     v$groupDF_subset[input$lvlOrderSelect] <- factor(v$groupDF_subset[[input$lvlOrderSelect]], levels = c(input$lvlOrderSorted))
-    
     #update dataframes levels based on level order
     v$dataList_melted <- lapply(v$dataList_melted, function(df) {
       df[input$lvlOrderSelect] <- factor(df[[input$lvlOrderSelect]], levels=c(input$lvlOrderSorted))
@@ -536,65 +563,71 @@ server <- function(input, output, session) {
     
   })
   ##### Plot #####
-  observeEvent(v$dataList_melted, {
+  observeEvent(input$type_plot_selector, {
     output$plot <- renderPlot({
-      v$customP
       req(input$yAxisRange)
-      req(input$lvlOrderSorted)
-      
-      # return(plot_exception("sorry, no data is found."))
-      
       df <- v$dataList_melted[[1]]
-      pOD <- makePlot(df, input, isolate(v$customP), od=T)
       
-      if(!is.null(input$secPlotDisplay) && input$plot_selector != v$subTableNames[[1]]) {
-        dfSec <- v$dataList_melted[[input$plot_selector]]
-        text <- input$plot_selector
+      if(input$type_plot_selector == "Growth Plot") {
+        pOD <- makePlot(df, input, isolate(v$customP), od=T)
         
-        #if RLU/OD
-        if(input$secPlotMethod) {
-          dfSec$value <- isolate(as.numeric(dfSec$value)/as.numeric(v$dataList_melted[[1]]$value))
-          text <- paste(text, "/", v$subTableNames[[1]])
+        # return(plot_exception("sorry, no data is found."))
+        
+        # pOD <- makePlot(df, input, isolate(v$customP), od=T)
+        
+        if(!is.null(input$secPlotDisplay) && input$data_selector != v$subTableNames[[1]]) {
+          dfSec <- v$dataList_melted[[input$data_selector]]
+          text <- input$data_selector
+          
+          #if RLU/OD
+          if(input$secPlotMethod) {
+            dfSec$value <- isolate(as.numeric(dfSec$value)/as.numeric(v$dataList_melted[[1]]$value))
+            text <- paste(text, "/", v$subTableNames[[1]])
+          }
+          
+          pSec <- makePlot(dfSec, input, isolate(v$customP), text, od=F)
+          
+          
+          if(input$secPlotDisplay) {
+            pSec <- ggarrange(pOD, pSec, ncol = 1, nrow = 2, align = "v", common.legend = T, legend = "right")
+          }
+          p <- pSec
+          return(p)
         }
-        dfSec <- getUpLo(dfSec)
         
-        pSec <- makePlot(dfSec, input, isolate(v$customP), text, od=F)
+        p <- pOD
         
-      
-        if(input$secPlotDisplay == "Dual") {
-          pSec <- ggarrange(pOD, pSec, ncol = 1, nrow = 2, align = "v", common.legend = T, legend = "right")
-        # }else if(input$secPlotDisplay == "Combined") {
-          # pSec <- makePlot(dfSec, input, isolate(v$customP), text, od=F)
-        }
-        v$p <- pSec
-        return(pSec)
+        
+      }else {
+        req(v$params_list) #display they need to update calculation
+        
+        df_params <- cbind(
+          v$groupDF_subset,
+          v$params_list[[input$data_selector]]
+        )
+        
+        data_raw <- cbind(data.frame(time=v$timeScale), v$dataList[[input$data_selector]])
+        dataOD <- data_raw[which(data_raw$time >= input$auc_window[1] & data_raw$time <= input$auc_window[2]),]
+        
+        
+        p <- makeParametersPlot(input$type_plot_selector, df_params, data_raw, input, isolate(v$params), isolate(v$customP))
+        
       }
-      
-      v$p <- pOD
-      return(pOD)
+      v$p <- p
+
+      return(p)
     }, width=reactive(input$width*72), height = reactive(input$height*72))
     
   })
   
-  toListenParams <- reactive({
-    list(v$groupsDF, input$plot_selector, input$auc_window, input$secPlotMethod)
-  })
-  
 
   ##### Parameters #####
-  
-  observeEvent(toListenParams(), {
-    req(input$auc_window)
-
+  observeEvent(input$auc_window, {
     dt <- v$dataList
-  
     #If RLU/OD is selected, normalise the RLU table by OD table
     if(!is.null(input$secPlotMethod) && input$secPlotMethod) {
-      dt[[input$plot_selector]] <- dt[[input$plot_selector]]/df[[1]]
+      dt[[input$data_selector]] <- dt[[input$data_selector]]/df[[1]]
     }
-    
-  
-    
     v$params_list <- lapply(dt, function(subTable) {
       subTable <- subTable[v$groupsDF$KeepWell == "Yes"]
       data <- getLogisticParameters(v$timeScale, subTable, input$auc_window)[2:10]
@@ -603,110 +636,12 @@ server <- function(input, output, session) {
       data$max_val <- getMaxVal(v$timeScale, subTable, input$auc_window)
       return(data)
     })
-    
-    
-    output$downloadUI_params <- renderUI({
-      list(
-        downloadButton("downloadparams_df", label = "Download Growth Parameters Data"),
-        tags$p(),
-        downloadButton("downloadparams_pdf", label = "Download Growth Parameters (PDF)"),
-        downloadButton("downloadparams_eps", label = "Download Growth Parameters (EPS)")
-      )
-    })
-    df <- cbind(
-      v$groupDF_subset,
-      v$params_list[[input$plot_selector]]
-    )
-    
-    dataOD <- cbind(data.frame(time=v$timeScale), v$dataList[[input$plot_selector]])
-    dataOD <- dataOD[which(dataOD$time >= input$auc_window[1] & dataOD$time <= input$auc_window[2]),]
-    
-    output$params_plot <- renderPlot({
-      if(input$param_plot_selector == "Bar Plot") {
-        p_bar <- ggplot(df, aes_string(y=v$params[input$param_selector], x=input$params_x_scale))
-        if(input$color != 'None') {
-          print(unlist(strsplit(input$color,", ")))
-          x <- nrow(unique(df[unlist(strsplit(input$color,", "))]))
-          p_bar <- p_bar + aes_string(col=paste0("interaction(", paste0(unlist(strsplit(input$color,", ")), collapse=", "),")"),
-                              fill=paste0("interaction(", paste0(unlist(strsplit(input$color,", ")), collapse=", "),")")) +
-            scale_color_manual(values=getPalette(x, v$customP)[[input$pal]], aesthetics = c("colour", "fill"), name=input$color)
-        }
-  
-        if (input$fw != "None") {
-          p_bar <- p_bar + facet_wrap(as.formula(paste("~", paste0(unlist(strsplit(input$fw,", ")), collapse="+"))), nrow = input$nRowsFacets)
-        }
-        p_bar <- p_bar +
-          stat_summary(geom="bar", fun = mean, position = "dodge", alpha = 0.3) +
-          stat_summary(geom="errorbar", fun.data = mean_se, width = 0.3, position=position_dodge(0.9), colour="black") +
-          geom_point(pch=21, position=position_jitterdodge(dodge.width=0.9), col="black", size=input$size_p) +
-          scale_y_continuous(expand = c(0,0), limits = c(0,1.03*max(df[v$params[input$param_selector]], na.rm=T))) +
-          # ggtitle(names(v$params)[match(input$parameter, v$params)]) +
-          getTheme(input$theme, input$size) +
-          theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
-          ylab(paste(input$param_selector, ' [', input$auc_window[1], 'h - ', input$auc_window[2], 'h]', sep=""))
-        v$p_bar <- p_bar
-        return(p_bar)
-        
-      }else if(input$param_plot_selector == "Tile Plot") {
-        
-        
-        p_tile <- ggplot(df, aes_string(y=input$params_y_scale, x=input$params_x_scale, fill=v$params[input$param_selector])) + 
-            scale_fill_gradientn(colours=getPalette(8, v$customP)[[input$pal]], aesthetics = "fill", name=input$param_selector)
-
-        if (input$fw != "None" && !is.null(input$referenceCurve) ) {
-          if(input$referenceCurve != "None") {
-            p_tile <- p_tile + facet_wrap(~facetRef, nrow = input$nRowsFacets)
-          }else {
-            p_tile <- p_tile + facet_wrap(as.formula(paste("~", paste0(unlist(strsplit(input$fw,", ")), collapse="+"))), nrow = input$nRowsFacets)
-          }
-        }
-        p_tile <- p_tile +
-          geom_raster() +
-          scale_y_discrete(expand = c(0,0)) +
-          scale_x_discrete(expand = c(0,0)) +
-          getTheme(input$theme, input$size) +
-          theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
-          ggtitle(paste(input$param_selector, ' [', input$auc_window[1], 'h - ', input$auc_window[2], 'h]', sep="")) +
-          theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())
-        v$p_bar <- p_tile
-        return(p_tile)
-        
-        
-        
-        
-      }else {
-        ps <- do.call(grid.arrange, lapply(1:nrow(df), function(sample_index) {
-          cp <- "green"
-          if(df[sample_index, "note"] != "") {
-            cp <- "red"
-          }
-          k <- df[sample_index, "k"]
-          N0 <- df[sample_index, "n0"]
-          r <- df[sample_index, "r"]
-          currentWell <- df$Well[sample_index]
-          p <- ggplot(dataOD, aes_string(x="time", y=sym(currentWell))) +
-            geom_line(size=1.2) +
-            stat_function(fun = function(t) k / (1 + ((k - N0) / N0) * exp(-r * t)), col=cp) +
-            ylim(0, 1.15*max(dataOD[-1], na.rm=T)) +
-            theme_classic() +
-            annotate(geom = 'text', label = paste(" ", currentWell), x = -Inf, y = Inf, hjust = 0, vjust = 1, col=cp) +
-            theme(axis.title=element_blank(),
-                  axis.text=element_blank(),
-                  axis.ticks=element_blank(),
-                  panel.grid=element_blank())
-
-          return(p)
-        }))
-        v$p_bar <- ps
-        return(ps)
-      }
-    },  width=reactive(input$width*72), height = reactive(input$height*72))
   })
   
 }
 
 
 
-shinyApp(ui, server)
+shinyApp(ui=ui, server=server)
 
 

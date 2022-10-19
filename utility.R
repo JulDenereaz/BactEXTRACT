@@ -111,7 +111,6 @@ updateGroup <- function(groups, conditions, wells) {
 aggrTech <- function(dataList, N, horiz=T, multiF=F) {
   #If N not a multiple of total number of wells
   if(ncol(dataList[[1]]) %% N) {
-    #showNotification()
     return(dataList)
   }
   
@@ -146,6 +145,36 @@ aggrTech <- function(dataList, N, horiz=T, multiF=F) {
   })
   return(dataList_aggre)
 }
+
+
+aggrTechV <- function(v, N, horiz=T, multiF=F) {
+  if(length(v) %% N) {
+    return(v)
+  }
+  #horiz => A1, A2, A3
+  newV <- do.call(c, lapply(seq(1, length(v), by=N), function(i) {
+    subs <- i:(i+N-1)
+    if(!horiz) {
+      x <- match(v[order(as.numeric(gsub("\\D", "", v)))], v)
+      subs <- x[subs]
+    }
+    nam <- paste(v[subs], collapse="-")
+    if(length(multiF) > 1) {
+      tmp <- c()
+      for (ti in paste0(multiF, "_")) {
+        tmp <- c(tmp,paste0(ti, nam))
+        
+      }
+      return(tmp)
+    }
+    
+    return(nam)
+  }))
+  return(newV)
+}
+
+
+
 
 
 dataMelter <- function(dataList, groups, time) {
@@ -231,7 +260,7 @@ addReferenceCurve <- function(refLevel, fw, df) {
 
 
 
-normalize <- function(df=NULL, method=NULL, baseOD=NULL) {
+normalize <- function(df=NULL, method=NULL, baseOD=NULL, wells=NULL) {
   if(is.null(df) || is.null(method) || is.null(baseOD)) {
     return()
   }
@@ -241,9 +270,14 @@ normalize <- function(df=NULL, method=NULL, baseOD=NULL) {
     return(data.frame(lapply(df, function(well) well - well[1] + as.numeric(baseOD, na.rm=T)), check.names = F))
   }else if(method == 'Min(wells 1-2-3)') {
     return(data.frame(lapply(df, function(well) well - min(well[1:3], na.rm=T) + as.numeric(baseOD, na.rm=T)), check.names = F))
-  }else if(method == 'No Normalisation') {
-    return(data.frame(lapply(df, function(well) well=well), check.names = F))
+  }else if(method == 'Specific Well(s)') {
+    if(is.null(wells)) {
+      return(data.frame(lapply(df, function(well) well=well), check.names = F))
+    }
+    tmp <- data.frame(lapply(df, function(well) well - rowMeans(df[wells], na.rm=T) + as.numeric(baseOD, na.rm=T)), check.names = F)
+    return(tmp)
   }
+  return(data.frame(lapply(df, function(well) well=well), check.names = F))
 }
 
 
