@@ -44,12 +44,16 @@ getFile <- function(datapath) {
       #removing columns or rows with only NA in it
       subTableDF <- subTableDF[, colSums(is.na(subTableDF)) != nrow(subTableDF)]
       subTableDF <- subTableDF[rowSums(is.na(subTableDF)) != ncol(subTableDF),]
+      
+      
+      
+      
       #Removing Temp and Cycle columns
-      rawTableList$time <- subTableDF[, grep("Time", colnames(subTableDF))]/3600
+      rawTableList$time <- subTableDF[, grep("time", tolower(colnames(subTableDF)))]/3600
+      subTableDF <- subTableDF[, -grep("temp|time|cycle|t..", tolower(colnames(subTableDF)))]
       if(biotek) {
         rawTableList$time <- rawTableList$time*86400
       }
-      subTableDF <- subTableDF[, -grep("Temp|Time|Cycle|T..", colnames(subTableDF))]
       
       name <- rawdata[indexStart[i]-1,1]
       if(is.na(name) | name == "") {
@@ -59,6 +63,7 @@ getFile <- function(datapath) {
       #Append to the list
       rawTableList[[name]] <- as.data.frame(subTableDF)
     }
+    
   }
   return(rawTableList)
 }
@@ -212,6 +217,9 @@ dataMelter <- function(dataList, groups, time) {
 }
 
 
+orNull <- function(a, b) {
+  ifelse(is.null(a), return(b), return(a))
+}
 
 getTheme <- function(theme, size) {
   themes_map <- list(
@@ -264,6 +272,7 @@ normalize <- function(df=NULL, method=NULL, baseOD=NULL, wells=NULL) {
   if(is.null(df) || is.null(method) || is.null(baseOD)) {
     return()
   }
+
   if(method == 'Mininum') {
     return(data.frame(lapply(df, function(well) well - min(well, na.rm=T) + as.numeric(baseOD, na.rm=T)), check.names = F))
   }else if(method == '1st value') {

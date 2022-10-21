@@ -29,7 +29,7 @@ source('utility.R', local = TRUE)
 source('plot.R', local = TRUE)
 
 
-version <- "0.1"
+version <- "0.2"
 
 ##### UI #####
 ui <- dashboardPage(
@@ -86,10 +86,12 @@ ui <- dashboardPage(
             box(
               height='50vh',
               width=5,
-              title="2. Groups Design",
-              # title=p("Groups Design", 
-              #         actionButton("processGrou", "Apply Modifications", icon = icon("refresh"),
-              #                      class = "btn-xs", title = "Update")),
+              # title="2. Groups Design",
+              title= p("2. Groups Design", 
+                       actionButton('loadLocalStorage', 'Load Local Groups Storage', icon = icon('arrows-rotate'),
+                                    class = 'btn-xs', title = '', style = "position: absolute; right: 10px")
+              ),
+                
               status = 'primary',
               rHandsontableOutput("groups", height = 'calc(50vh - 60px)')
             ),
@@ -160,17 +162,17 @@ server <- function(input, output, session) {
       fluidPage(
         list(
           splitLayout(
-            selectInput('techAggr', 'Tech. Repl. Merging:', choices=c("None", "Horizontal", "Vertical")),
+            selectInput('techAggr', 'Tech. Repl. Merging:', choices=c("None", "Horizontal", "Vertical"), selected = input$localStorage$techAggr),
             numericInput('techAggrN', 'By:', value=3, min=2)
           ),
           splitLayout(
-            selectInput('norm', 'OD Normalisation:', choices=c('Mininum', '1st well', 'Min(wells 1-2-3)', 'Specific Well(s)', "No Normalisation")),
-            selectInput('norm_baseOD', 'Base OD:', choices=c(0, 0.001, 0.002, 0.003, 0.004), selected = 0.001),
+            selectInput('norm', 'OD Normalisation:', choices=c('Mininum', '1st well', 'Min(wells 1-2-3)', 'Specific Well(s)', "No Normalisation"), selected = input$localStorage$norm),
+            selectInput('norm_baseOD', 'Base OD:', choices=c(0, 0.001, 0.002, 0.003, 0.004), selected = orNull(input$localStorage$norm_baseOD, 0.001)),
           ),
           uiOutput('normByWellsUI'),
           tags$hr(),
           HTML("<b>Enter Conditions:</b>"),
-          textInput('conditionsUI_Input', NULL, value=paste(input$localStorage$cond, collapse = ","), placeholder = "Strain, Treatment, ..."),
+          textInput('conditionsUI_Input', NULL, value=input$localStorage$conditionsUI_Input, placeholder = "Strain, Treatment, ..."),
           bsTooltip("conditionsUI_Input", "Tooltip works", placement = "bottom", trigger = "hover", options = NULL),
           actionButton("updateCond", "Apply Modifications", icon = icon("gears"),class = "btn-xl", title = "Update")
           # column(12, align="center", p('(Cannot start with number, separated by coma)')),     
@@ -181,44 +183,54 @@ server <- function(input, output, session) {
       # lapply(react, function(reactVal){
       #   v[[reactVal]] <- NULL
       # })
-      output$graph_optionsUI <- NULL
       output$plot <- NULL
-      output$downloads <- NULL
       output$groups <- NULL
     }
     
     tryCatch({
-      rawdata_file_list <- do.call(list, lapply(input$files$datapath, function(file) {
-        obj <- getFile(file)
-        return(obj)
-      }))
-      names(rawdata_file_list) <- input$files$name
-    },
-    error = function(e) {
-      stop(safeError(e))
-    }
+        rawdata_file_list <- do.call(list, lapply(input$files$datapath, function(file) {
+          obj <- getFile(file)
+          return(obj)
+        }))
+        names(rawdata_file_list) <- input$files$name
+      },
+      error = function(e) {
+        stop(safeError(e))
+      }
     )
     v$rawdata_list <- list()
+    
+    
+    timeCols <- lapply(rawdata_file_list, function(rawdt) {
+      return(rawdt$time)
+    })
+    nr <- max(lengths(timeCols))
+    
     #rawdata_list contains the merged files sub-tables, OD first, then followed by any additional luminescence/RLU etc.. tables
-    v$timeScale <- rawdata_file_list[[1]]$time
-    v$subTableNames <- names(rawdata_file_list[[1]])[-1]
-    for (i in v$subTableNames) {
-      v$rawdata_list[[i]] <- do.call(cbind, lapply(isolate(input$files$name), function(filename) {
-        df <- isolate(rawdata_file_list[[filename]][[i]])
+    v$subTableNames <- names(rawdata_file_list[[1]])[-1] #Not looping through the time vector
+    for (subTableName in v$subTableNames) {
+      v$rawdata_list[[subTableName]] <- do.call(cbind, lapply(isolate(input$files$name), function(filename) {
+        df <- isolate(rawdata_file_list[[filename]][[subTableName]])
+        
+        #Fill up the DF with NA rows based on the max nr value
+        if(nrow(df) < nr) {
+          df[nrow(df):nr,] <- NA
+        }
         if(length(input$files$name) > 1) {
           colnames(df) <- paste(tools::file_path_sans_ext(filename), colnames(df), sep="_")
         }
         return(df)
       }))
     }
-    # showNotification('Files successfully uploaded', type='message')
+    
+    v$timeScale <- timeCols[[which.max(lengths(timeCols))]]
+    
+    showNotification('File(s) successfully uploaded', type='message')
     
     
   })
   
-  observeEvent(input$file_settings, {
-    print(fromJSON(input$file_settings$datapath))
-  })
+
   
   
   
@@ -253,9 +265,13 @@ server <- function(input, output, session) {
   
   ##### Update button Panel #####
   observeEvent(input$updateCond, {
-    
+    if(input$conditionsUI_Input == "") {
+      showNotification('You need at lest one condition', type='warning')
+    }
     req(input$conditionsUI_Input)
     v$conditions <- formartConditions(input$conditionsUI_Input)
+    
+
     
     #Aggregating technical replicate by mean
     if(input$techAggr != "None") {
@@ -263,7 +279,6 @@ server <- function(input, output, session) {
     }else {
       aggdata_list <- v$rawdata_list
     }
-
     
     if(!is.null(v$groups)) {
       #Reset the v$groups if the user change the settings of technical replicate aggregating
@@ -274,9 +289,6 @@ server <- function(input, output, session) {
       }
     }
     
-    #add localstorage for groups, if same number of rows
-    
-    
     v$groups <- updateGroup(isolate(v$groups), v$conditions, colnames(aggdata_list[[1]]))
 
     
@@ -286,7 +298,6 @@ server <- function(input, output, session) {
     v$dataList <- aggdata_list
     v$dataList[[1]] = normalize(isolate(v$dataList[[1]]), input$norm, input$norm_baseOD, input$normByWells)
     
-    updateStore(session, name = "cond", value = v$conditions)
     
     #SapLine to preview the growth curve of each well
     v$groups$Preview <- apply(v$dataList[[1]], 2, function(x) jsonlite::toJSON(list(values=as.vector(replace(x, is.na(x), 0)), options=list(type="line", spotRadius=0, chartRangeMin=0, chartRangeMax=1))))
@@ -321,17 +332,17 @@ server <- function(input, output, session) {
             column(
               width=12,
               style="padding-left: 0px;padding-right: 0px;",
-              selectInput('color', 'Color:', choices=c("None", v$conditions, v$interactions), selected = v$conditions[1], width='100%'),
-              selectInput('linetype', 'Linetype:', choices=c("None", v$conditions), width='100%'),
-              selectInput('shape', 'Shape:', choices=c("None", v$conditions), width='100%'),
-              selectInput('grouping', 'Grouping:', choices=c("None", v$interactions), width='100%'),
-              selectInput('fw', 'Facet Wrap:', choices=c("None", v$conditions, v$interactions), width='100%'),
+              selectInput('color', 'Color:', choices=c("None", v$conditions, v$interactions), selected = input$localStorage$color, width='100%'),
+              selectInput('linetype', 'Linetype:', choices=c("None", v$conditions), selected = input$localStorage$linetype, width='100%'),
+              selectInput('shape', 'Shape:', choices=c("None", v$conditions), selected = input$localStorage$shape, width='100%'),
+              selectInput('grouping', 'Grouping:', choices=c("None", v$interactions), selected = input$localStorage$grouping, width='100%'),
+              selectInput('fw', 'Facet Wrap:', choices=c("None", v$conditions, v$interactions), selected = input$localStorage$fw, width='100%'),
               uiOutput("refCurveUI")
             ),
             column(
               width=12,              
               style="padding-left: 0px;padding-right: 0px;",
-              selectInput('se', 'Standart Error Style:', choices=c("None", "Line Range", "Ribbon"), width='100%'),
+              selectInput('se', 'Standart Error Style:', choices=c("None", "Line Range", "Ribbon"), selected = input$localStorage$se, width='100%'),
               selectInput('lvlOrderSelect', "Order Levels:", choices = c(v$conditions), width='100%'),
               uiOutput("levelOrderUI", width='100%')
             )
@@ -339,7 +350,6 @@ server <- function(input, output, session) {
           tags$hr(),
           selectInput('param_selector', 'Parameter to display:', choices=c(names(v$params)), width='100%'),
           sliderInput('auc_window', 'Window range parameters [h]:', min=0, step=0.5, max=ceiling(max(v$timeScale)), value=c(0, ifelse(ceiling(max(v$timeScale)) > 6, 6, floor(max(v$timeScale)))))
-          # actionButton('calculateParameters', "Calculate Growth Parameters", icon = icon("calculator"))
         )
       )
     })
@@ -356,28 +366,29 @@ server <- function(input, output, session) {
                 width="100%",
                 inputId = "pal", 
                 label = NULL,
-                choices = getPalette(8),
+                choices = isolate(getPalette(8, v$customP)),
+                selected = orNull(input$localStorage$pal, 'Viridis'),
                 textColor = c(
-                  rep("white", 5), rep("black", 4) 
+                  rep("white", 5), rep("black", 8) 
                 )
               )
             ),
-            textInput('customColorPalette', 'Custom Color Palette:', value=isolate(paste(input$localStorage$customP, collapse=",")), placeholder = "#4b123f, #cb13b2, ...")
+            textInput('customColorPalette', 'Custom Color Palette:', value=paste(isolate(input$localStorage$customP), collapse=","),  placeholder = "#4b123f, #cb13b2, ...")
           ),
           splitLayout(
-            numericInput('height', 'Height (Inches):', value=5, min = 4, max = 50, step = 1),
-            numericInput('width', 'Width: (Inches)', value=10, min = 4, max = 50, step = 1),
+            numericInput('height', 'Height (Inches):', value=orNull(isolate(input$localStorage$height), 5), min = 4, max = 50, step = 1),
+            numericInput('width', 'Width: (Inches)', value=orNull(isolate(input$localStorage$width), 10), min = 4, max = 50, step = 1),
             
           ),
           tags$hr(),
           splitLayout(
-            textInput('y_axis_title', "X axis Title:"),
+            textInput('x_axis_title', "X axis Title:", value = input$localStorage$x_axis_title),
             selectInput('params_x_scale', 'X axis selector:', choices=v$conditions, width='100%'),
           ),
           sliderInput('range', 'X axis range:', min=0, step=0.5, max=ceiling(max(v$timeScale)), value=c(0, ceiling(max(v$timeScale)))),
           tags$hr(),
           splitLayout(
-            textInput('y_axis_title', "Y axis Title:"),
+            textInput('y_axis_title', "Y axis Title:", value = input$localStorage$y_axis_title),
             selectInput('params_y_scale', 'Y axis selector:', choices=v$conditions, width='100%'),
           ),
           checkboxInput('logScale', 'Log10 Transformation', value = T),
@@ -395,7 +406,7 @@ server <- function(input, output, session) {
           column(
             12, 
             align="center",
-            textAreaInput('customThemeUI', 'Add custom ggplot layers (separated by coma):', placeholder = "geom_vline(...), theme(...)")
+            textAreaInput('customThemeUI', 'Add custom ggplot layers (separated by coma):', value=input$localStorage$customThemeUI, placeholder = "geom_vline(...), theme(...)")
           )
         )
       )
@@ -420,14 +431,26 @@ server <- function(input, output, session) {
   
   
   observeEvent(input$customColorPalette, {
-    vec <- gsub(" ", "", unlist(strsplit(input$customColorPalette, ",")))
-    
-    if(isHex(vec)) {
-      v$customP <- vec
-      updateStore(session, name = "customP", value = v$customP)
-      updatePalettePicker(inputId = "pal", choices = getPalette(8, vec))
-    }
+    isolate({
+      vec <- gsub(" ", "", unlist(strsplit(input$customColorPalette, ",")))
+      
+      if(isHex(vec)) {
+        v$customP <- vec
+        updatePalettePicker(
+          inputId = "pal", 
+          choices = getPalette(8, vec),
+          selected = orNull(input$localStorage$pal, 'Viridis'),
+          textColor = c(
+            rep("white", 5), rep("black", 8) 
+          )
+        )
+      }
+    })
   })
+  
+  
+  
+  
   
   ##### Groups #####
   observeEvent(input$groups, {
@@ -455,17 +478,25 @@ server <- function(input, output, session) {
                h3("Downloads :"),
                tags$style(".skin-blue .sidebar a { color: #444; }"),
                downloadButton("download_df", label = "Growth Data"),
+               tags$p(""),
                downloadButton("downloadparams_df", label = "Growth Parameters Data"),
                tags$p(""),               
-               downloadButton("download_settings", label = "Settings"),
                tags$p(""),
                downloadButton("download_pdf", label = "Plot (PDF)"),
+               tags$p(""),
                downloadButton("download_eps", label = "Plot (EPS)"),
+               tags$p(""),
+               downloadButton("download_settings", label = "Settings"),
                tags$hr(),
+               actionButton("save_settings", label = "Save Settings Locally", icon=icon("floppy-disk")),
 
         )
       )
     })
+    
+
+    
+    
     output$download_df <- downloadHandler(
       function() {paste0(input$title, "_growthData.csv")},
       function(file) {
@@ -475,7 +506,6 @@ server <- function(input, output, session) {
     output$download_settings <- downloadHandler(
       function() {paste0(input$title, "_settings.json")},
       function(file) {
-        # write.csv(input$localStorage, file, row.names = FALSE)
         writeLines(jsonlite::toJSON(input$localStorage), file)
       }
     )
@@ -520,8 +550,8 @@ server <- function(input, output, session) {
         output$refCurveUI <- renderUI({
           list(
             splitLayout(
-              selectInput('referenceCurve', 'Ref. Curve:', choices = c("None", isolate(levels(v$groupsDF[[input$fw]]))), width='100%'),
-              numericInput('nRowsFacets', 'N. Rows:', value=1, min = 1, max = 10, step = 1)
+              selectInput('referenceCurve', 'Ref. Curve:', choices = c("None", isolate(levels(v$groupsDF[[input$fw]]))), selected=input$localStorage$referenceCurve, width='100%'),
+              numericInput('nRowsFacets', 'N. Rows:', value=orNull(input$localStorage$nRowsFacets, 1), min = 1, max = 10, step = 1)
             )
           )
         })
@@ -548,6 +578,71 @@ server <- function(input, output, session) {
     })
   })
   
+  ##### Local Storage #####
+  
+  observeEvent(input$loadLocalStorage, {
+    req(v$groups)
+    repl <- as.data.frame(input$localStorage$groupsDF)
+    int <- intersect(colnames(v$groupsDF), colnames(repl))
+    v$groups[,int] <- repl[,int]
+    
+  })
+  
+  
+  observeEvent(input$file_settings, {
+    saveDF <- fromJSON(input$file_settings$datapath)
+    updateStore(session, name = "color", value = saveDF$color)
+    updateStore(session, name = "linetype", value = saveDF$linetype)
+    updateStore(session, name = "shape", value = saveDF$shape)
+    updateStore(session, name = "grouping", value = saveDF$grouping)
+    updateStore(session, name = "fw", value = saveDF$fw)
+    updateStore(session, name = "referenceCurve", value = saveDF$referenceCurve)
+    updateStore(session, name = "nRowsFacets", value = saveDF$nRowsFacets)
+    updateStore(session, name = "se", value = saveDF$se)
+    updateStore(session, name = "conditionsUI_Input", value = saveDF$conditionsUI_Input )
+    updateStore(session, name = "customP", value = saveDF$customP)
+    updateStore(session, name = "groupsDF", value = saveDF$groupsDF)
+    updateStore(session, name = "height", value = saveDF$height)
+    updateStore(session, name = "width", value = saveDF$width)
+    updateStore(session, name = "pal", value = saveDF$pal)
+    updateStore(session, name = "norm", value = saveDF$norm)
+    updateStore(session, name = "norm_baseOD", value = saveDF$norm_baseOD)
+    updateStore(session, name = "techAggr", value = saveDF$techAggr)
+    updateStore(session, name = "x_axis_title", value = saveDF$x_axis_title)
+    updateStore(session, name = "y_axis_title", value = saveDF$y_axis_title)
+    updateStore(session, name = "customThemeUI", value = saveDF$customThemeUI)
+  })
+  
+  
+  observeEvent(input$save_settings, {
+    isolate({
+      updateStore(session, name = "color", value = input$color)
+      updateStore(session, name = "linetype", value = input$linetype)
+      updateStore(session, name = "shape", value = input$shape)
+      updateStore(session, name = "grouping", value = input$grouping)
+      updateStore(session, name = "fw", value = input$fw)
+      updateStore(session, name = "referenceCurve", value = input$referenceCurve)
+      updateStore(session, name = "nRowsFacets", value = input$nRowsFacets)
+      updateStore(session, name = "se", value = input$se)
+      updateStore(session, name = "conditionsUI_Input", value = input$conditionsUI_Input )
+      updateStore(session, name = "customP", value = v$customP)
+      updateStore(session, name = "groupsDF", value = v$groupsDF[-which(names(v$groupsDF) %in% c("Wells", "Preview"))])
+      updateStore(session, name = "height", value = input$height)
+      updateStore(session, name = "width", value = input$width)
+      updateStore(session, name = "pal", value = input$pal)
+      updateStore(session, name = "norm", value = input$norm)
+      updateStore(session, name = "norm_baseOD", value = input$norm_baseOD)
+      updateStore(session, name = "techAggr", value = input$techAggr)
+      updateStore(session, name = "x_axis_title", value = input$x_axis_title)
+      updateStore(session, name = "y_axis_title", value = input$y_axis_title)
+      updateStore(session, name = "y_axis_title", value = input$customThemeUI)
+    })
+    
+    showNotification('Successfully saved locally', type='message')
+    
+    
+  })
+  
   
   
   
@@ -565,6 +660,7 @@ server <- function(input, output, session) {
   ##### Plot #####
   observeEvent(input$type_plot_selector, {
     output$plot <- renderPlot({
+      req(input$type_plot_selector)
       req(input$yAxisRange)
       df <- v$dataList_melted[[1]]
       
@@ -572,8 +668,6 @@ server <- function(input, output, session) {
         pOD <- makePlot(df, input, isolate(v$customP), od=T)
         
         # return(plot_exception("sorry, no data is found."))
-        
-        # pOD <- makePlot(df, input, isolate(v$customP), od=T)
         
         if(!is.null(input$secPlotDisplay) && input$data_selector != v$subTableNames[[1]]) {
           dfSec <- v$dataList_melted[[input$data_selector]]
@@ -609,12 +703,11 @@ server <- function(input, output, session) {
         data_raw <- cbind(data.frame(time=v$timeScale), v$dataList[[input$data_selector]])
         dataOD <- data_raw[which(data_raw$time >= input$auc_window[1] & data_raw$time <= input$auc_window[2]),]
         
-        
         p <- makeParametersPlot(input$type_plot_selector, df_params, data_raw, input, isolate(v$params), isolate(v$customP))
         
       }
       v$p <- p
-
+      
       return(p)
     }, width=reactive(input$width*72), height = reactive(input$height*72))
     
@@ -623,16 +716,25 @@ server <- function(input, output, session) {
 
   ##### Parameters #####
   observeEvent(input$auc_window, {
+    progress <- shiny::Progress$new()
+    on.exit(progress$close())
+    progress$set(message = "Calculating Parameters", value = 0)
+    
     dt <- v$dataList
     #If RLU/OD is selected, normalise the RLU table by OD table
     if(!is.null(input$secPlotMethod) && input$secPlotMethod) {
       dt[[input$data_selector]] <- dt[[input$data_selector]]/df[[1]]
     }
     v$params_list <- lapply(dt, function(subTable) {
+      progress$inc(1/10, detail = "")
       subTable <- subTable[v$groupsDF$KeepWell == "Yes"]
+      progress$inc(1/10, detail = "")
       data <- getLogisticParameters(v$timeScale, subTable, input$auc_window)[2:10]
+      progress$inc(1/10, detail = "")
       data$AUC <- getTrapezoidalAUC(v$timeScale, subTable, input$auc_window)
+      progress$inc(1/10, detail = "")
       data$max_gr <- getMaxGr(v$timeScale, subTable, input$auc_window)
+      progress$inc(1/10, detail = "")
       data$max_val <- getMaxVal(v$timeScale, subTable, input$auc_window)
       return(data)
     })

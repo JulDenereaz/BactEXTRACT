@@ -95,8 +95,8 @@ makePlot <- function(dfRaw, input, customP, ylabel="", od = T) {
       labs(
         linetype=input$linetype,
         shape=input$shape,
-        x ="Time [h]",
-        y = "Cell Density [OD 595nm]")
+        x = ifelse(input$x_axis_title =="", "Time [h]", input$x_axis_title),
+        y = ifelse(input$y_axis_title =="", "Cell Density [OD 595nm]", input$y_axis_title),)
     
   }else {
     p <- p + 
@@ -106,8 +106,8 @@ makePlot <- function(dfRaw, input, customP, ylabel="", od = T) {
       theme(axis.text.y.left = element_text(margin=margin(t=0, r=10, b=0, l=0))) +
       coord_cartesian(clip = "off") +
       labs(
-        x ="Time [h]",
-        y = ylabel) #to modify into given parameter from name of subtable (RLU/GFP...)
+        x = ifelse(input$x_axis_title =="", "Time [h]", input$x_axis_title),
+        y = ifelse(input$y_axis_title =="", ylabel, input$y_axis_title)) #to modify into given parameter from name of subtable (RLU/GFP...)
   }
   
   if(!is.null(input$customThemeUI) && nchar(input$customThemeUI) > 0) {
@@ -174,6 +174,7 @@ makeParametersPlot <- function(type, df, dataOD, input, params, customP) {
     
   }else if (type == "Logistic Curves") { #logistic curves
     ps <- do.call(grid.arrange, lapply(1:nrow(df), function(sample_index) {
+      
       cp <- "green"
       if(df[sample_index, "note"] != "") {
         cp <- "red"
