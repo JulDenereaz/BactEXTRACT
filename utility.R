@@ -1,5 +1,5 @@
 themes <- c("BW" , "Classic", "Light", "Minimal", "Gray")
-react <- c("conditions", "rawdata_list", "dataList", "groups", "names", "interactions", "rawdata", "themes_map", "params_list", "params_df", "groupDF_subset")
+react <- c("conditions", "rawdata_list", "dataList", "groups", "interactions", "params_list", "groupDF_subset")
 
 getFile <- function(datapath) {
   rawTableList <- list()
@@ -189,7 +189,7 @@ dataMelter <- function(dataList, groups, time) {
 
   }
   #converting the conditions columns into factor
-  groups[-c(1,2,3)] <- lapply(groups[-c(1,2,3)] , factor)
+  # groups[-c(1,2,3)] <- lapply(groups[-c(1,2,3)] , factor)
   
   conditions <- names(groups)[-c(1,2,3)]
 
@@ -198,10 +198,10 @@ dataMelter <- function(dataList, groups, time) {
     #subset only selected wells with KeepWell
     subTable <-  subTable[which(names(subTable) %in% c(groups$Wells))]
     # subTable <- subTable[which(time >= timeRange[1] & time <= timeRange[2]),]
-    subTable_melt = melt(cbind(data.frame(time = time), subTable), id=c('time'))
+    subTable_melt <- melt(cbind(data.frame(time = time), subTable), id=c('time'))
     ind <- as.vector(match(subTable_melt$variable, groups$Wells))
     lapply(conditions, function(cond) {
-      subTable_melt[cond] <<-  as.factor(as.vector(groups[,cond])[ind])
+      subTable_melt[cond] <<-  factor(groups[[cond]][ind], levels=levels(groups[[cond]]))
     })
     #set to 0 negative values
     subTable_melt$value <-(abs(subTable_melt$value)+subTable_melt$value)/2
@@ -419,7 +419,7 @@ getLogisticParameters <- function(timeCol, plate, range) {
   tmp <- cbind(data.frame(time=timeCol), plate)
   tmp <- tmp[which(tmp$time >= range[1] & tmp$time <= range[2]),]
   
-  tmp <- SummarizeGrowthByPlate(tmp)
+  tmp <- suppressWarnings(SummarizeGrowthByPlate(tmp))
   return(tmp)
 }
 

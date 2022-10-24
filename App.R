@@ -154,6 +154,7 @@ server <- function(input, output, session) {
     "Log initial population size (Logistic)"="n0",
     "Sigma (Logistic)"="sigma"
   )
+  v$updateLvl <- F
   
   
   observeEvent(input$files, {
@@ -180,9 +181,11 @@ server <- function(input, output, session) {
       )
     })
     if(!is.null(v$rawdata_list)) {
-      # lapply(react, function(reactVal){
-      #   v[[reactVal]] <- NULL
-      # })
+      lapply(react, function(reactVal){
+        v[[reactVal]] <- NULL
+      })
+      output$graph_optionsUI <- NULL
+      # output$themeUI <- NULL
       output$plot <- NULL
       output$groups <- NULL
     }
@@ -271,7 +274,7 @@ server <- function(input, output, session) {
     req(input$conditionsUI_Input)
     v$conditions <- formartConditions(input$conditionsUI_Input)
     
-
+    
     
     #Aggregating technical replicate by mean
     if(input$techAggr != "None") {
@@ -314,15 +317,14 @@ server <- function(input, output, session) {
         hot_col(col="Preview",copyable=F, renderer=htmlwidgets::JS("renderSparkline"), valign='htCenter', allowColEdit=F, readOnly=T) %>%
         hot_table(highlightCol = T, highlightRow = T, allowRowEdit =F)
     })
-    #To add: from local storage update
-
+    
     
     ##### UI graph options #####
     output$graph_optionsUI <- renderUI({
       fluidPage(
         list(
           splitLayout(
-            selectInput('type_plot_selector', 'Type of plot:', choices =  c("Growth Plot", "Bar Plot", "Checker Plot", "Logistic Curves"), width='100%'),
+            selectInput('type_plot_selector', 'Type of plot:', choices =  c("Growth Plot", "Bar Plot", "Checker Plot", "Logistic Curves"), selected = input$localStorage$type_plot_selector, width='100%'),
             selectInput('data_selector', 'Data to display:', choices = names(v$dataList), width='100%'),
             
           ),
@@ -343,7 +345,7 @@ server <- function(input, output, session) {
               width=12,              
               style="padding-left: 0px;padding-right: 0px;",
               selectInput('se', 'Standart Error Style:', choices=c("None", "Line Range", "Ribbon"), selected = input$localStorage$se, width='100%'),
-              selectInput('lvlOrderSelect', "Order Levels:", choices = c(v$conditions), width='100%'),
+              selectInput('lvlOrderSelect', "Order Levels:", selected=input$localStorage$lvlOrderSelect, choices = c(v$conditions), width='100%'),
               uiOutput("levelOrderUI", width='100%')
             )
           ),
@@ -353,7 +355,7 @@ server <- function(input, output, session) {
         )
       )
     })
-
+    
     output$themeUI <- renderUI({
       fluidPage(
         list(
@@ -411,6 +413,8 @@ server <- function(input, output, session) {
         )
       )
     })
+
+
     
   })
   
@@ -425,6 +429,7 @@ server <- function(input, output, session) {
     }else {
       output$sec_plot_type_UI <- NULL
     }
+    
   })
   
 
@@ -449,25 +454,46 @@ server <- function(input, output, session) {
   })
   
   
-  
-  
-  
   ##### Groups #####
   observeEvent(input$groups, {
+    
     #This is called everytime the input$groups table gets modified by the user
     req(input$groups)
     
-    v$groupsDF <- data.frame(hot_to_r(input$groups))
-    v$groupsDF[-c(1,2,3)] <- lapply(v$groupsDF[-c(1,2,3)], factor)
+    
+    if(v$updateLvl) {
+      v$groupsDF[-c(1,3)] <- input$localStorage$groupsDF
+      v$groupsDF[-c(1,2,3)] <- lapply(names(v$groupsDF[-c(1,2,3)]), function(colna) {
+        col <- factor(v$groupsDF[[colna]], levels=c(input$localStorage$groupsDFLvl[[colna]]))
+        return(col)
+      })
+      v$updateLvl <- F
+    }else {
+      v$groupsDF <- data.frame(hot_to_r(input$groups))
+      v$groupsDF[-c(1,2,3)] <- lapply(v$groupsDF[-c(1,2,3)], factor)
+    }
+    
+
     
     v$dataList_melted <- dataMelter(v$dataList, v$groupsDF, v$timeScale)
-
+    
     v$groupDF_subset <- v$groupsDF[v$groupsDF$KeepWell=="Yes", -which(names(v$groupsDF) =="Preview")]
+    
+    if(!is.null(v$oldWells)) {
+      if(length(v$oldWells) != length(v$groupsDF$KeepWell)) {
+        calculateParams()
+      }else if(any(! v$oldWells == v$groupsDF$KeepWell)) {
+        calculateParams()
+      }
+    }
+    v$oldWells <- v$groupsDF$KeepWell
+    
     
     
     if(is.null(v$dataList_melted)) {
       return()
     }
+    
     
     ##### Downloads #####
     output$downloads <- renderUI({
@@ -544,6 +570,8 @@ server <- function(input, output, session) {
         )
       )
     })
+
+    
     observeEvent(input$fw, {
       #Only if facetWrap is select, and at least two different levels in that column
       if(input$fw != "None"){
@@ -576,6 +604,7 @@ server <- function(input, output, session) {
         })
       }
     })
+    reactPlot()
   })
   
   ##### Local Storage #####
@@ -585,6 +614,7 @@ server <- function(input, output, session) {
     repl <- as.data.frame(input$localStorage$groupsDF)
     int <- intersect(colnames(v$groupsDF), colnames(repl))
     v$groups[,int] <- repl[,int]
+    v$updateLvl <- T
     
   })
   
@@ -602,6 +632,7 @@ server <- function(input, output, session) {
     updateStore(session, name = "conditionsUI_Input", value = saveDF$conditionsUI_Input )
     updateStore(session, name = "customP", value = saveDF$customP)
     updateStore(session, name = "groupsDF", value = saveDF$groupsDF)
+    updateStore(session, name = "groupsDFLvl", value = saveDF$groupsDFLvl)
     updateStore(session, name = "height", value = saveDF$height)
     updateStore(session, name = "width", value = saveDF$width)
     updateStore(session, name = "pal", value = saveDF$pal)
@@ -611,6 +642,8 @@ server <- function(input, output, session) {
     updateStore(session, name = "x_axis_title", value = saveDF$x_axis_title)
     updateStore(session, name = "y_axis_title", value = saveDF$y_axis_title)
     updateStore(session, name = "customThemeUI", value = saveDF$customThemeUI)
+    updateStore(session, name = "type_plot_selector", value = saveDF$type_plot_selector)
+    updateStore(session, name = "lvlOrderSelect", value = saveDF$lvlOrderSelect)
   })
   
   
@@ -627,6 +660,7 @@ server <- function(input, output, session) {
       updateStore(session, name = "conditionsUI_Input", value = input$conditionsUI_Input )
       updateStore(session, name = "customP", value = v$customP)
       updateStore(session, name = "groupsDF", value = v$groupsDF[-which(names(v$groupsDF) %in% c("Wells", "Preview"))])
+      updateStore(session, name = "groupsDFLvl", value = lapply(v$groupsDF[-c(1,2,3)], levels))
       updateStore(session, name = "height", value = input$height)
       updateStore(session, name = "width", value = input$width)
       updateStore(session, name = "pal", value = input$pal)
@@ -635,7 +669,9 @@ server <- function(input, output, session) {
       updateStore(session, name = "techAggr", value = input$techAggr)
       updateStore(session, name = "x_axis_title", value = input$x_axis_title)
       updateStore(session, name = "y_axis_title", value = input$y_axis_title)
-      updateStore(session, name = "y_axis_title", value = input$customThemeUI)
+      updateStore(session, name = "customThemeUI", value = input$customThemeUI)
+      updateStore(session, name = "type_plot_selector", value = input$type_plot_selector)
+      updateStore(session, name = "lvlOrderSelect", value = input$lvlOrderSelect)
     })
     
     showNotification('Successfully saved locally', type='message')
@@ -643,7 +679,35 @@ server <- function(input, output, session) {
     
   })
   
-  
+  ##### Parameters #####
+  observeEvent(input$auc_window, {
+    calculateParams()
+  })
+
+  calculateParams <- reactive({
+    progress <- shiny::Progress$new()
+    on.exit(progress$close())
+    progress$set(message = "Calculating Parameters", value = 0)
+    dt <- v$dataList
+    #If RLU/OD is selected, normalise the RLU table by OD table
+    if(!is.null(input$secPlotMethod) && input$secPlotMethod) {
+      dt[[input$data_selector]] <- dt[[input$data_selector]]/df[[1]]
+    }
+    n <- length(dt)
+    v$params_list <- lapply(dt, function(subTable) {
+      progress$inc(1/(n*5), detail = "")
+      subTable <- subTable[v$groupsDF$KeepWell == "Yes"]
+      progress$inc(1/(n*5), detail = "")
+      data <- getLogisticParameters(v$timeScale, subTable, input$auc_window)[2:10]
+      progress$inc(1/(n*5), detail = "")
+      data$AUC <- getTrapezoidalAUC(v$timeScale, subTable, input$auc_window)
+      progress$inc(1/(n*5), detail = "")
+      data$max_gr <- getMaxGr(v$timeScale, subTable, input$auc_window)
+      progress$inc(1/(n*5), detail = "")
+      data$max_val <- getMaxVal(v$timeScale, subTable, input$auc_window)
+      return(data)
+    })
+  })  
   
   
   ##### lvl Order Sorter #####
@@ -655,12 +719,18 @@ server <- function(input, output, session) {
       df[input$lvlOrderSelect] <- factor(df[[input$lvlOrderSelect]], levels=c(input$lvlOrderSorted))
       return(df)
     })
+        
     
   })
+  
   ##### Plot #####
   observeEvent(input$type_plot_selector, {
+    reactPlot()
+  })
+
+  reactPlot <- function() {
     output$plot <- renderPlot({
-      req(input$type_plot_selector)
+      # req(input$type_plot_selector)
       req(input$yAxisRange)
       df <- v$dataList_melted[[1]]
       
@@ -707,38 +777,9 @@ server <- function(input, output, session) {
         
       }
       v$p <- p
-      
       return(p)
     }, width=reactive(input$width*72), height = reactive(input$height*72))
-    
-  })
-  
-
-  ##### Parameters #####
-  observeEvent(input$auc_window, {
-    progress <- shiny::Progress$new()
-    on.exit(progress$close())
-    progress$set(message = "Calculating Parameters", value = 0)
-    
-    dt <- v$dataList
-    #If RLU/OD is selected, normalise the RLU table by OD table
-    if(!is.null(input$secPlotMethod) && input$secPlotMethod) {
-      dt[[input$data_selector]] <- dt[[input$data_selector]]/df[[1]]
-    }
-    v$params_list <- lapply(dt, function(subTable) {
-      progress$inc(1/10, detail = "")
-      subTable <- subTable[v$groupsDF$KeepWell == "Yes"]
-      progress$inc(1/10, detail = "")
-      data <- getLogisticParameters(v$timeScale, subTable, input$auc_window)[2:10]
-      progress$inc(1/10, detail = "")
-      data$AUC <- getTrapezoidalAUC(v$timeScale, subTable, input$auc_window)
-      progress$inc(1/10, detail = "")
-      data$max_gr <- getMaxGr(v$timeScale, subTable, input$auc_window)
-      progress$inc(1/10, detail = "")
-      data$max_val <- getMaxVal(v$timeScale, subTable, input$auc_window)
-      return(data)
-    })
-  })
+  }
   
 }
 
