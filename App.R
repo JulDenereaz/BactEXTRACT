@@ -163,6 +163,15 @@ server <- function(input, output, session) {
   
   observeEvent(input$files, {
     req(input$files)
+    if(!is.null(v$rawdata_list)) {
+      lapply(react, function(reactVal){
+        v[[reactVal]] <- NULL
+      })
+      output$graph_optionsUI <- NULL
+      # output$themeUI <- NULL
+      output$plot <- NULL
+      output$groups <- NULL
+    }
     output$conditionsUI <- renderUI({
       fluidPage(
         list(
@@ -202,15 +211,7 @@ server <- function(input, output, session) {
         )
       )
     })
-    if(!is.null(v$rawdata_list)) {
-      lapply(react, function(reactVal){
-        v[[reactVal]] <- NULL
-      })
-      output$graph_optionsUI <- NULL
-      # output$themeUI <- NULL
-      output$plot <- NULL
-      output$groups <- NULL
-    }
+
     
     tryCatch({
         rawdata_file_list <- do.call(list, lapply(input$files$datapath, function(file) {
@@ -325,7 +326,7 @@ server <- function(input, output, session) {
     
     # horizontal normalisation
     v$dataList <- lagNorm(isolate(v$dataList), input$norm_lagPhase)
-
+    v$toCalculateParams <- T
     
     #SapLine to preview the growth curve of each well
     v$groups$Preview <- apply(v$dataList[[1]], 2, function(x) jsonlite::toJSON(list(values=as.vector(replace(x, is.na(x), 0)), options=list(type="line", spotRadius=0, chartRangeMin=0, chartRangeMax=1))))
@@ -509,7 +510,11 @@ server <- function(input, output, session) {
     
     v$groupDF_subset <- v$groupsDF[v$groupsDF$KeepWell=="Yes", -which(names(v$groupsDF) =="Preview")]
     
-    if(!is.null(v$oldWells)) {
+    
+    if(v$toCalculateParams) {
+      calculateParams()
+      v$toCalculateParams <- F
+    }else if(!is.null(v$oldWells)) {
       if(length(v$oldWells) != length(v$groupsDF$KeepWell)) {
         calculateParams()
       }else if(any(! v$oldWells == v$groupsDF$KeepWell)) {

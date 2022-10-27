@@ -21,8 +21,9 @@ makePlot <- function(dfRaw, input, customP, ylabel="", od = T) {
   }
   if(input$color != 'None') {
     x <- nrow(unique(df[unlist(strsplit(input$color,", "))]))
-    if(length(getPalette(x, customP)[[input$pal]]) < x) {
-      showNotification('Insufficient color values in the selected color palette', type="error")
+    nd <- length(getPalette(x, customP)[[input$pal]])
+    if(nd < x) {
+      showNotification(paste0('Insufficient number of color values in the selected color palette.', x, ' needed, but only ', nd, ' provided'), type="error")
       return()
     }
     p <- p + aes_string(col=paste0("interaction(", paste0(unlist(strsplit(input$color,", ")), collapse=", "),")"),
@@ -127,6 +128,11 @@ makeParametersPlot <- function(type, df, dataOD, input, params, customP) {
     p_bar <- ggplot(df, aes_string(y=params[input$param_selector], x=input$params_x_scale))
     if(input$color != 'None') {
       x <- nrow(unique(df[unlist(strsplit(input$color,", "))]))
+      nd <- length(getPalette(x, customP)[[input$pal]])
+      if(nd < x) {
+        showNotification(paste0('Insufficient number of color values in the selected color palette.', x, ' needed, but only ', nd, ' provided'), type="error")
+        return()
+      }
       p_bar <- p_bar + aes_string(col=paste0("interaction(", paste0(unlist(strsplit(input$color,", ")), collapse=", "),")"),
                                   fill=paste0("interaction(", paste0(unlist(strsplit(input$color,", ")), collapse=", "),")")) +
         scale_color_manual(values=getPalette(x, customP)[[input$pal]], aesthetics = c("colour", "fill"), name=input$color)
@@ -174,7 +180,6 @@ makeParametersPlot <- function(type, df, dataOD, input, params, customP) {
     
   }else if (type == "Logistic Curves") { #logistic curves
     ps <- do.call(grid.arrange, lapply(1:nrow(df), function(sample_index) {
-      
       cp <- "green"
       if(df[sample_index, "note"] != "") {
         cp <- "red"
