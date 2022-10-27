@@ -10,6 +10,7 @@ library(shinyStore)
 library(shinydashboard)
 library(shinyWidgets)
 library(shinyBS)
+library(shinycssloaders)
 library(sortable)
 library(esquisse) 
 library(tools)
@@ -111,8 +112,11 @@ ui <- dashboardPage(
               height = '100vh',
               div(
                 style="overflow-x:auto;height:100%;",
-                plotOutput('plot', height="100%")
-                
+                shinycssloaders::withSpinner(
+                  plotOutput('plot', height="100%"),
+                  type=3,
+                  color.background ="white"
+                )
               )
             )
           ),
@@ -163,17 +167,32 @@ server <- function(input, output, session) {
       fluidPage(
         list(
           splitLayout(
-            selectInput('techAggr', 'Tech. Repl. Merging:', choices=c("None", "Horizontal", "Vertical"), selected = input$localStorage$techAggr),
+            selectInput('techAggr', 'Tech. Repl. Merge:', choices=c("None", "Horizontal", "Vertical"), selected = input$localStorage$techAggr),
             numericInput('techAggrN', 'By:', value=3, min=2)
           ),
           bsTooltip("techAggr", "Average adjacent wells together (A1-A2-A3 or A1-B1-C1)", placement = "left", trigger = "hover", options = NULL),
-          splitLayout(
-            selectInput('norm', 'OD Normalisation:', choices=c('Mininum', '1st well', 'Min(wells 1-2-3)', 'Specific Well(s)', "No Normalisation"), selected = input$localStorage$norm),
-            selectInput('norm_baseOD', 'Base OD:', choices=c(0, 0.001, 0.002, 0.003, 0.004), selected = orNull(input$localStorage$norm_baseOD, 0.001)),
+          div(
+            style="padding-left: 0px;padding-right: 0px;",
+            tags$label("Normalisation:")
           ),
-          bsTooltip("norm", "Method of Normalisation", placement = "left", trigger = "hover", options = NULL),
-          bsTooltip("norm_baseOD", "This value will be added to each well", placement = "left", trigger = "hover", options = NULL),
+          splitLayout(
+            selectInput('norm', NULL, choices=c('Mininum', '1st well', 'Min(wells 1-2-3)', 'Specific Well(s)', "No Normalisation"), selected = input$localStorage$norm),
+            selectInput('norm_baseOD', NULL, choices=c(0, 0.001, 0.002, 0.003, 0.004), selected = orNull(input$localStorage$norm_baseOD, 0.001)),
+          ),
           uiOutput('normByWellsUI'),
+          splitLayout(
+            numericInput('norm_lagPhase', "Lag Phase normalisation Threshold:", value=orNull(input$localStorage$norm_lagPhase, 0), min=0, max=1, step=0.0001),
+            div(
+              style="padding-left: 0px;padding-right: 0px;",
+              # tags$label("Lag Phase normalisation:")
+            )
+          #   textInput('norm_formula', 'Additional Formula f(well):', placeholder="well+1")
+          ),
+          
+          
+          bsTooltip("norm", "Method of Normalisation", placement = "left", trigger = "hover", options = NULL),
+          bsTooltip("norm_lagPhase", "Lag phase will be truncated until OD is higher than this value", placement = "left", trigger = "hover", options = NULL),
+          bsTooltip("norm_baseOD", "This value will be added to each well", placement = "left", trigger = "hover", options = NULL),
           tags$hr(),
           HTML("<b>Enter Conditions:</b>"),
           textInput('conditionsUI_Input', NULL, value=input$localStorage$conditionsUI_Input, placeholder = "Strain, Treatment, ..."),
@@ -300,10 +319,13 @@ server <- function(input, output, session) {
     
     v$interactions <- getInteractions(v$conditions)
     
-    #normalization
+    # vertical normalisation
     v$dataList <- aggdata_list
-    v$dataList[[1]] = normalize(isolate(v$dataList[[1]]), input$norm, input$norm_baseOD, input$normByWells)
+    v$dataList[[1]] <- normalise(isolate(v$dataList[[1]]), input$norm, input$norm_baseOD, input$normByWells)
     
+    # horizontal normalisation
+    v$dataList <- lagNorm(isolate(v$dataList), input$norm_lagPhase)
+
     
     #SapLine to preview the growth curve of each well
     v$groups$Preview <- apply(v$dataList[[1]], 2, function(x) jsonlite::toJSON(list(values=as.vector(replace(x, is.na(x), 0)), options=list(type="line", spotRadius=0, chartRangeMin=0, chartRangeMax=1))))
@@ -326,13 +348,7 @@ server <- function(input, output, session) {
     output$graph_optionsUI <- renderUI({
       fluidPage(
         list(
-          splitLayout(
-            selectInput('type_plot_selector', 'Type of plot:', choices =  c("Growth Plot", "Bar Plot", "Checker Plot", "Logistic Curves"), selected = input$localStorage$type_plot_selector, width='100%'),
-            selectInput('data_selector', 'Data to display:', choices = names(v$dataList), selected=input$localStorage$data_selector, width='100%'),
-            
-          ),
-          uiOutput("sec_plot_type_UI"),
-          tags$hr(),
+
           splitLayout(
             column(
               width=12,
@@ -353,6 +369,12 @@ server <- function(input, output, session) {
             )
           ),
           tags$hr(),
+          splitLayout(
+            selectInput('type_plot_selector', 'Plot type:', choices =  c("Growth Plot", "Bar Plot", "Checker Plot", "Logistic Curves"), selected = input$localStorage$type_plot_selector, width='100%'),
+            selectInput('data_selector', 'Data to display:', choices = names(v$dataList), selected=input$localStorage$data_selector, width='100%'),
+            
+          ),
+          uiOutput("sec_plot_type_UI"),
           selectInput('param_selector', 'Parameter to display:', choices=c(names(v$params)), selected=input$localStorage$param_selector, width='100%'),
           splitLayout(
             cellWidths = c("10%", "90%"),
@@ -519,6 +541,8 @@ server <- function(input, output, session) {
                downloadButton("download_pdf", label = "Plot (PDF)"),
                tags$p(""),
                downloadButton("download_eps", label = "Plot (EPS)"),
+               tags$p(""),               
+               downloadButton("download_png", label = "Plot (PNG)"),
                tags$p(""),
                downloadButton("download_settings", label = "Settings"),
                tags$hr(),
@@ -553,6 +577,12 @@ server <- function(input, output, session) {
       function(){paste0(input$title,'.eps')},
       function(file){
         ggsave(file,plot=v$p, width=input$width, height=input$height, units="in", dpi=300, device=cairo_ps)
+      }
+    )
+    output$download_png <- downloadHandler(
+      function(){paste0(input$title,'.png')},
+      function(file){
+        ggsave(file,plot=v$p, width=input$width, height=input$height, units="in", dpi=300)
       }
     )
     output$downloadparams_df <- downloadHandler(
@@ -665,6 +695,7 @@ server <- function(input, output, session) {
     updateStore(session, name = "data_selector", value = saveDF$data_selector)
     updateStore(session, name = "param_selector", value = saveDF$param_selector)
     updateStore(session, name = "secPlotMethod", value = saveDF$secPlotMethod)
+    updateStore(session, name = "norm_lagPhase", value = saveDF$norm_lagPhase)
     
     showNotification('Successfully imported settings file', type='message')
     
@@ -707,6 +738,7 @@ server <- function(input, output, session) {
       updateStore(session, name = "data_selector", value = input$data_selector)
       updateStore(session, name = "param_selector", value = input$param_selector)
       updateStore(session, name = "secPlotMethod", value = input$secPlotMethod)
+      updateStore(session, name = "norm_lagPhase", value = input$norm_lagPhase)
     })
     
     showNotification('Successfully saved locally', type='message')
@@ -722,7 +754,7 @@ server <- function(input, output, session) {
       # df <- isolate(v$dataList_melted[[1]])
       df <- melt(cbind(data.frame(time=v$timeScale), v$dataList[[1]]),id="time")
       p <- ggplot(data=df, aes_string(x="time", y="value", group="variable")) +
-        geom_line(size=input$size_l) +
+        geom_line(size=1.2, alpha=0.7) +
         scale_x_continuous(expand=c(0,0), limits = input$range) +
         scale_y_continuous(expand=c(0,0), limits = c(0, 1.15*max(df$value))) +
         annotate("rect",

@@ -268,7 +268,7 @@ addReferenceCurve <- function(refLevel, fw, df) {
 
 
 
-normalize <- function(df=NULL, method=NULL, baseOD=NULL, wells=NULL) {
+normalise <- function(df=NULL, method=NULL, baseOD=NULL, wells=NULL) {
   if(is.null(df) || is.null(method) || is.null(baseOD)) {
     return()
   }
@@ -288,6 +288,28 @@ normalize <- function(df=NULL, method=NULL, baseOD=NULL, wells=NULL) {
   }
   return(data.frame(lapply(df, function(well) well=well), check.names = F))
 }
+
+lagNorm <- function(dl=NULL, threshold=0) {
+  fw <- lapply(dl[[1]], function(well) {
+    for (i in 1:length(well)) {
+      if(well[i] > threshold) {
+        return(i)
+      }
+    }
+  })
+  
+  dl <- lapply(dl, function(dt) {
+    daf <- do.call(cbind, lapply(names(dt), function(wellName) {
+      if(!is.null(fw[[wellName]])) {
+        dt[wellName] <- as.numeric(c(dt[fw[[wellName]]:nrow(dt[wellName]),wellName], rep(NA, fw[[wellName]]-1)))
+      }
+      return(dt[wellName])
+    }))
+    return(data.frame(daf, check.names = F))
+  })
+  return(dl)
+}
+
 
 
 
@@ -343,7 +365,7 @@ getTrapezoidalAUC <- function(timeCol, plate, range) {
       #Formula taken from doi.org/10.1016/j.febslet.2005.02.025
       #Trapezoidal AUC
       x <- ((odCol[i]+odCol[i+1])/2-odCol[1]) * (timeCol[i+1]-timeCol[i])
-      if(x < 0) {x <- 0}
+      if(x < 0 | is.na(x)) {x <- 0}
       auc <- c(auc, x)
     }
     return(as.numeric(sum(auc)))  
@@ -365,7 +387,7 @@ getMaxVal <- function(timeCol, plate, range) {
 
 getMu <- function(N, N0, t, t0) {
   #µ = ( (log10 N - log10 N0) 2.303) / (t - t0)
-  if(N<0 || N0<0) {
+  if(N<0 || N0<0 || is.na(N)) {
     return(0)
   }
   return(((log10(N) - log10(N0))* 2.303) / (t - t0))
