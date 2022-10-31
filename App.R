@@ -30,7 +30,7 @@ source('utility.R', local = TRUE)
 source('plot.R', local = TRUE)
 
 
-version <- "0.2"
+version <- "0.5"
 
 ##### UI #####
 ui <- dashboardPage(
@@ -218,45 +218,41 @@ server <- function(input, output, session) {
           obj <- getFile(file)
           return(obj)
         }))
+        #If cannot read the file, throw an UI mini-screen to let the user choose which cell is the start of the table
         names(rawdata_file_list) <- input$files$name
       },
       error = function(e) {
         stop(safeError(e))
       }
     )
-    v$rawdata_list <- list()
     
     
     timeCols <- lapply(rawdata_file_list, function(rawdt) {
       return(rawdt$time)
     })
-    nr <- max(lengths(timeCols))
-    
-    #rawdata_list contains the merged files sub-tables, OD first, then followed by any additional luminescence/RLU etc.. tables
-    v$subTableNames <- names(rawdata_file_list[[1]])[-1] #Not looping through the time vector
-    for (subTableName in v$subTableNames) {
-      v$rawdata_list[[subTableName]] <- do.call(cbind, lapply(isolate(input$files$name), function(filename) {
-        df <- isolate(rawdata_file_list[[filename]][[subTableName]])
-        
-        #Fill up the DF with NA rows based on the max nr value
-        if(nrow(df) < nr) {
-          df[nrow(df):nr,] <- NA
-        }
-        if(length(input$files$name) > 1) {
-          colnames(df) <- paste(tools::file_path_sans_ext(filename), colnames(df), sep="_")
-        }
-        return(df)
-      }))
-    }
-    
     v$timeScale <- timeCols[[which.max(lengths(timeCols))]]
     
-    showNotification('File(s) successfully uploaded', type='message')
     
+    v$subTableNames <- names(rawdata_file_list[[1]])[-1] #Not looping through the time vector
+    v$rawdata_list <- mergeSubTables(rawdata_file_list, v$subTableNames, isolate(input$files$name), length(v$timeScale))
+    
+    #rawdata_list contains the merged files sub-tables, OD first, then followed by any additional luminescence/RLU etc.. tables
+
+    # showModal(modalDialog(
+    #   title="Could not find any data table",
+    #   textInput('excelCell', "Please enter the :"),
+    #   easyClose = FALSE,
+    #   footer = tagList(
+    #     actionButton("ok", "OK")
+    #   )
+    # ))
+    showNotification('File(s) successfully uploaded', type='message')
     
   })
   
-
+  observeEvent(input$ok, {
+    removeModal()
+  })
   
   
   
@@ -364,7 +360,7 @@ server <- function(input, output, session) {
             column(
               width=12,              
               style="padding-left: 0px;padding-right: 0px;",
-              selectInput('se', 'Standart Error Style:', choices=c("None", "Line Range", "Ribbon"), selected = input$localStorage$se, width='100%'),
+              selectInput('se', 'Standard Error Style:', choices=c("None", "Line Range", "Ribbon"), selected = input$localStorage$se, width='100%'),
               selectInput('lvlOrderSelect', "Order Levels:", selected=input$localStorage$lvlOrderSelect, choices = c(v$conditions), width='100%'),
               uiOutput("levelOrderUI", width='100%')
             )
@@ -753,7 +749,6 @@ server <- function(input, output, session) {
   
   ##### Parameters #####
   observeEvent(input$auc_window, {
-    calculateParams()
     
     output$plot_auc_window <- renderPlot({
       # df <- isolate(v$dataList_melted[[1]])
@@ -773,6 +768,7 @@ server <- function(input, output, session) {
 
       return(p)
     }, height = 250)
+    calculateParams()
   })
 
   calculateParams <- reactive({
@@ -849,6 +845,7 @@ server <- function(input, output, session) {
           p <- pSec
           return(p)
         }
+        
         
         p <- pOD
         

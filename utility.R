@@ -7,7 +7,9 @@ getFile <- function(datapath) {
     rawdata <-  read.table(datapath, sep="\t", header=T, dec=",")
     rawdata <- rawdata[,colSums(is.na(rawdata))<nrow(rawdata)]
     rawdata <- rawdata[complete.cases(rawdata[,1]),]
-    rawTableList[["OD"]] <- rawdata
+    rawdata <- as.data.frame(sapply(rawdata, as.numeric))
+    rawTableList$time <- rawdata$time
+    rawTableList[["OD"]] <- rawdata[-which(names(rawdata) == "time")]
     
   }else {
     rawdata <- read.xlsx2(file=datapath, sheetIndex=1, as.data.frame=T, header=F, colIndex = 1:300)
@@ -46,8 +48,6 @@ getFile <- function(datapath) {
       subTableDF <- subTableDF[rowSums(is.na(subTableDF)) != ncol(subTableDF),]
       
       
-      
-      
       #Removing Temp and Cycle columns
       rawTableList$time <- subTableDF[, grep("time", tolower(colnames(subTableDF)))]/3600
       subTableDF <- subTableDF[, -grep("temp|time|cycle|t..", tolower(colnames(subTableDF)))]
@@ -67,6 +67,36 @@ getFile <- function(datapath) {
   }
   return(rawTableList)
 }
+
+mergeSubTables <- function(rawdata_file_list, subNames, fileNames, nr) {
+  out <- list()
+  for (subTableName in subNames) {
+    out[[subTableName]] <- do.call(cbind, lapply(fileNames, function(filename) {
+      df <- isolate(rawdata_file_list[[filename]][[subTableName]])
+      #Fill up the DF with NA rows based on the max nr value
+      if(nrow(df) < nr) {
+        df[nrow(df):nr,] <- NA
+      }
+      #Paste file name to well name, if multiple files (creating unique well name)
+      if(length(fileNames) > 1) {
+        colnames(df) <- paste(tools::file_path_sans_ext(filename), colnames(df), sep="_")
+      }
+      return(df)
+    }))
+  }
+  
+  return(out)
+  
+  
+}
+
+
+
+
+
+
+
+
 
 getDFlogticks <- function(fw, df, nrows, data, refcurve) {
   if(refcurve != "None") {
@@ -379,7 +409,6 @@ getMaxVal <- function(timeCol, plate, range) {
     odCol <- plate[[well]]
     
     odCol <- odCol[which(timeCol >= range[1] & timeCol <= range[2])]
-    
     return(as.numeric(max(odCol)))
   })
   return(as.numeric(max))
@@ -403,7 +432,7 @@ getMaxGr <- function(timeCol, plate, range) {
     maxgr <- 0
     for (i in 2:length(odCol)) {
       mu <- getMu(odCol[i], odCol[i-1], timeCol[i], timeCol[i-1])
-      if(mu > maxgr) {
+      if(!is.nan(mu) &  mu > maxgr) {
         maxgr <- mu
       }
     }
