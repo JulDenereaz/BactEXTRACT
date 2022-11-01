@@ -57,6 +57,7 @@ getFile <- function(datapath) {
       
       name <- rawdata[indexStart[i]-1,1]
       if(is.na(name) | name == "") {
+        #if first subtable not named, it is named OD 
         name <- ifelse(i == 1, "OD", i)
       }
       
@@ -120,7 +121,6 @@ getDFlogticks <- function(fw, df, nrows, data, refcurve) {
   
   fin <- semi_join(df_levels, df_facets, by=facets)
   df_final <- cbind(data.frame(x=NA), fin)[seq(1, nrow(fin), by=ceiling((nrow(fin))/nrows)),]
-  
   return(df_final)
 }
 

@@ -237,7 +237,7 @@ server <- function(input, output, session) {
     v$rawdata_list <- mergeSubTables(rawdata_file_list, v$subTableNames, isolate(input$files$name), length(v$timeScale))
     
     #rawdata_list contains the merged files sub-tables, OD first, then followed by any additional luminescence/RLU etc.. tables
-
+    
     # showModal(modalDialog(
     #   title="Could not find any data table",
     #   textInput('excelCell', "Please enter the :"),
@@ -500,7 +500,13 @@ server <- function(input, output, session) {
       v$groupsDF[-c(1,2,3)] <- lapply(v$groupsDF[-c(1,2,3)], factor)
     }
     
-
+    v$groupsDF[-c(1,2,3)] <- lapply(names(v$groupsDF[-c(1,2,3)]), function(colna) {
+      if(any(grepl("  ", v$groupsDF[[colna]]))) {
+        showNotification(paste0('Some double spaced were found and replaced in column ', colna), type="warning")
+      }
+      return(as.factor(gsub("  ", " ", v$groupsDF[[colna]])))
+    })
+    
     
     v$dataList_melted <- dataMelter(v$dataList, v$groupsDF, v$timeScale)
     
