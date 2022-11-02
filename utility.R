@@ -475,7 +475,117 @@ getLogisticParameters <- function(timeCol, plate, range) {
 }
 
 
+saveUpdate <- function(session, df, customP=NULL, groupsDF=NULL, groupsDFLvl=NULL) {
+  if(!is.null(customP)) {
+    updateStore(session, name = "customP", value = customP)
+    updateStore(session, name = "groupsDF", value = groupsDF)
+    updateStore(session, name = "groupsDFLvl", value = groupsDFLvl)
+  }else {
+    updateStore(session, name = "customP", value = df$customP)
+    updateStore(session, name = "groupsDF", value = df$groupsDF)
+    updateStore(session, name = "groupsDFLvl", value = df$groupsDFLvl)
+  }
+  updateStore(session, name = "color", value = df$color)
+  updateStore(session, name = "linetype", value = df$linetype)
+  updateStore(session, name = "shape", value = df$shape)
+  updateStore(session, name = "grouping", value = df$grouping)
+  updateStore(session, name = "fw", value = df$fw)
+  updateStore(session, name = "referenceCurve", value = df$referenceCurve)
+  updateStore(session, name = "nRowsFacets", value = df$nRowsFacets)
+  updateStore(session, name = "se", value = df$se)
+  updateStore(session, name = "conditionsUI_Input", value = df$conditionsUI_Input )
 
+  updateStore(session, name = "height", value = df$height)
+  updateStore(session, name = "width", value = df$width)
+  updateStore(session, name = "pal", value = df$pal)
+  updateStore(session, name = "norm", value = df$norm)
+  updateStore(session, name = "norm_baseOD", value = df$norm_baseOD)
+  updateStore(session, name = "techAggr", value = df$techAggr)
+  updateStore(session, name = "x_axis_title", value = df$x_axis_title)
+  updateStore(session, name = "y_axis_title", value = df$y_axis_title)
+  updateStore(session, name = "customThemeUI", value = df$customThemeUI)
+  updateStore(session, name = "type_plot_selector", value = df$type_plot_selector)
+  updateStore(session, name = "lvlOrderSelect", value = df$lvlOrderSelect)
+  updateStore(session, name = "size_l", value = df$size_l)
+  updateStore(session, name = "size_p", value = df$size_p)
+  updateStore(session, name = "theme", value = df$theme)
+  updateStore(session, name = "params_x_scale", value = df$params_x_scale)
+  updateStore(session, name = "params_y_scale", value = df$params_y_scale)
+  updateStore(session, name = "range", value = df$range)
+  updateStore(session, name = "data_selector", value = df$data_selector)
+  updateStore(session, name = "param_selector", value = df$param_selector)
+  updateStore(session, name = "secPlotMethod", value = df$secPlotMethod)
+  updateStore(session, name = "norm_lagPhase", value = df$norm_lagPhase)
+}
+
+
+
+updateSettings <- function(df, customP=NULL, groupsDF=NULL, groupsDFLvl=NULL) {
+  settings <- list()
+  if(!is.null(customP)) {
+    settings$customP <-  customP
+    settings$groupsDF <-  groupsDF
+    settings$groupsDFLvl <-  groupsDFLvl
+  }else {
+    settings$customP <-  df$customP
+    settings$groupsDF <-  df$groupsDF
+    settings$groupsDFLvl <-  df$groupsDFLvl
+  }
+  settings$color <-  df$color
+  settings$linetype <-  df$linetype
+  settings$shape <-  df$shape
+  settings$grouping <-  df$grouping
+  settings$fw <-  df$fw
+  settings$referenceCurve <-  df$referenceCurve
+  settings$nRowsFacets <-  df$nRowsFacets
+  settings$se <-  df$se
+  settings$conditionsUI_Input <-  df$conditionsUI_Input 
+  
+  settings$height <-  df$height
+  settings$width <-  df$width
+  settings$pal <-  df$pal
+  settings$norm <-  df$norm
+  settings$norm_baseOD <-  df$norm_baseOD
+  settings$techAggr <-  df$techAggr
+  settings$x_axis_title <-  df$x_axis_title
+  settings$y_axis_title <-  df$y_axis_title
+  settings$customThemeUI <-  df$customThemeUI
+  settings$type_plot_selector <-  df$type_plot_selector
+  settings$lvlOrderSelect <-  df$lvlOrderSelect
+  settings$size_l <-  df$size_l
+  settings$size_p <-  df$size_p
+  settings$theme <-  df$theme
+  settings$params_x_scale <-  df$params_x_scale
+  settings$params_y_scale <-  df$params_y_scale
+  settings$range <-  df$range
+  settings$data_selector <-  df$data_selector
+  settings$param_selector <-  df$param_selector
+  settings$secPlotMethod <-  df$secPlotMethod
+  settings$norm_lagPhase <-  df$norm_lagPhase
+  return(settings)
+}
+
+
+
+
+
+
+
+removePattern <- function(df, x, replacem) {
+  df <- lapply(names(df), function(colna) {
+    if(any(grepl("  ", df[[colna]]))) {
+      showNotification(paste0('Some double spaced were found and replaced in column ', colna), type="warning")
+      return(as.factor(gsub("  ", " ", df[[colna]])))
+    }
+    return(df[[colna]])
+  })
+  return(df)
+}
+  
+  
+  
+  
+  
 
 
 isHex <- function(vector) {

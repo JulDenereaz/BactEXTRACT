@@ -5,6 +5,7 @@ library(grid)
 library(gridExtra)
 library(growthcurver)
 library(shiny) 
+library(shinyjs) 
 library(shinythemes)
 library(shinyStore)
 library(shinydashboard)
@@ -44,7 +45,7 @@ ui <- dashboardPage(
     fileInput("files", "Choose TECAN Excel File(s)",
               multiple = TRUE,
               accept = c(".xlsx", ".txt")),
-    fileInput("file_settings", "Choose Settings File",
+    fileInput("loadSaveFromFile", "Choose Settings File",
               multiple = FALSE,
               accept = c(".json")),
     initStore("localStorage", "BactEXTRACT_storage"),
@@ -88,10 +89,10 @@ ui <- dashboardPage(
               width=5,
               # title="2. Groups Design",
               title= p("2. Groups Design", 
-                       actionButton('loadLocalStorage', 'Load saved Groups Design', icon = icon('arrows-rotate'),
+                       actionButton('loadGroupsStorage', 'Load saved Groups Design', icon = icon('arrows-rotate'),
                                     class = 'btn-xs', title = '', style = "position: absolute; right: 10px")
               ),
-              bsTooltip("loadLocalStorage", "Replace current table with imported or saved table", placement = "bottom", trigger = "hover", options = NULL),
+              bsTooltip("loadGroupsStorage", "Replace current table with imported or saved table", placement = "bottom", trigger = "hover", options = NULL),
               
               status = 'primary',
               rHandsontableOutput("groups", height = 'calc(50vh - 60px)')
@@ -158,9 +159,63 @@ server <- function(input, output, session) {
     "Log initial population size (Logistic)"="n0",
     "Sigma (Logistic)"="sigma"
   )
-  v$updateLvl <- F
+  
+  ##### Local Storage #####
+  #Initialize reactives values
+  v$loadedFromSave <- F
+  
+  v$settings <- list()
   
   
+  observeEvent(input$loadSaveFromFile, {
+    v$settings <- updateSettings(fromJSON(input$loadSaveFromFile$datapath))
+    showNotification('Successfully imported settings file', type='message')
+  })  
+  
+  observeEvent(input$deleteLocalSave, {
+    v$settings <- list()
+    updateStore(session, name='settings', value=NULL)
+    showNotification('Deleted local Save', type='message')
+  })
+  
+  
+  observeEvent(input$saveLocally, {
+    tmp <- updateSettings(
+      df=input, 
+      customP=v$customP, 
+      groupsDF=v$groupsDF[-which(names(v$groupsDF) %in% c("Wells", "Preview"))], 
+      groupsDFLvl=lapply(v$groupsDF[-c(1,2,3)], levels)
+    )
+    updateStore(session, name='settings', value=tmp)
+    showNotification('Successfully saved locally', type='message')
+  })
+  
+
+  
+  
+  observeEvent(input$loadGroupsStorage, {
+    req(v$groups)
+    repl <- as.data.frame(v$settings$groupsDF)
+    if(nrow(repl) != nrow(v$groups)) {
+      showNotification('Number of rows differs from save and current file', type='error')
+      return()
+    }
+    int <- intersect(colnames(v$groupsDF), colnames(repl))
+    v$groups[,int] <- "NA"
+    v$groups[,int] <- repl[,int]
+    
+    v$groupsDF[,int] <- "NA"
+    v$groupsDF[,int] <- repl[,int]
+    v$groupsDF[-c(1,2,3)] <- lapply(names(v$groupsDF[-c(1,2,3)]), function(colna) {
+      col <- factor(v$groupsDF[[colna]], levels=c(v$settings$groupsDFLvl[[colna]]))
+      return(col)
+    })
+    
+    v$loadedFromSave <- T
+    showNotification('Successfully loaded Groups Design')
+  })
+  
+  ##### File Input #####
   observeEvent(input$files, {
     req(input$files)
     if(!is.null(v$rawdata_list)) {
@@ -176,7 +231,7 @@ server <- function(input, output, session) {
       fluidPage(
         list(
           splitLayout(
-            selectInput('techAggr', 'Tech. Repl. Merge:', choices=c("None", "Horizontal", "Vertical"), selected = input$localStorage$techAggr),
+            selectInput('techAggr', 'Tech. Repl. Merge:', choices=c("None", "Horizontal", "Vertical"), selected = v$settings$techAggr),
             numericInput('techAggrN', 'By:', value=3, min=2)
           ),
           bsTooltip("techAggr", "Average adjacent wells together (A1-A2-A3 or A1-B1-C1)", placement = "left", trigger = "hover", options = NULL),
@@ -185,12 +240,12 @@ server <- function(input, output, session) {
             tags$label("Normalisation:")
           ),
           splitLayout(
-            selectInput('norm', NULL, choices=c('Mininum', '1st well', 'Min(wells 1-2-3)', 'Specific Well(s)', "No Normalisation"), selected = input$localStorage$norm),
-            selectInput('norm_baseOD', NULL, choices=c(0, 0.001, 0.002, 0.003, 0.004), selected = orNull(input$localStorage$norm_baseOD, 0.001)),
+            selectInput('norm', NULL, choices=c('Mininum', '1st well', 'Min(wells 1-2-3)', 'Specific Well(s)', "No Normalisation"), selected = v$settings$norm),
+            selectInput('norm_baseOD', NULL, choices=c(0, 0.001, 0.002, 0.003, 0.004), selected = orNull(v$settings$norm_baseOD, 0.001)),
           ),
           uiOutput('normByWellsUI'),
           splitLayout(
-            numericInput('norm_lagPhase', "Lag Phase normalisation Threshold:", value=orNull(input$localStorage$norm_lagPhase, 0), min=0, max=1, step=0.0001),
+            numericInput('norm_lagPhase', "Lag Phase normalisation Threshold:", value=orNull(v$settings$norm_lagPhase, 0), min=0, max=1, step=0.0001),
             div(
               style="padding-left: 0px;padding-right: 0px;",
               # tags$label("Lag Phase normalisation:")
@@ -204,7 +259,7 @@ server <- function(input, output, session) {
           bsTooltip("norm_baseOD", "This value will be added to each well", placement = "left", trigger = "hover", options = NULL),
           tags$hr(),
           HTML("<b>Enter Conditions:</b>"),
-          textInput('conditionsUI_Input', NULL, value=input$localStorage$conditionsUI_Input, placeholder = "Strain, Treatment, ..."),
+          textInput('conditionsUI_Input', NULL, value=v$settings$conditionsUI_Input, placeholder = "Strain, Treatment, ..."),
           bsTooltip("conditionsUI_Input", "Key words with which you can separate your growth curves", placement = "bottom", trigger = "hover", options = NULL),
           actionButton("updateCond", "Apply Modifications", icon = icon("gears"),class = "btn-xl", title = "Update")
           # column(12, align="center", p('(Cannot start with number, separated by coma)')),     
@@ -231,8 +286,6 @@ server <- function(input, output, session) {
       return(rawdt$time)
     })
     v$timeScale <- timeCols[[which.max(lengths(timeCols))]]
-    
-    
     v$subTableNames <- names(rawdata_file_list[[1]])[-1] #Not looping through the time vector
     v$rawdata_list <- mergeSubTables(rawdata_file_list, v$subTableNames, isolate(input$files$name), length(v$timeScale))
     
@@ -246,6 +299,12 @@ server <- function(input, output, session) {
     #     actionButton("ok", "OK")
     #   )
     # ))
+    if(!is.null(input$localStorage$settings)) {
+      v$settings <- input$localStorage$settings
+      showNotification("Loaded Local Settings")
+    }
+    
+    
     showNotification('File(s) successfully uploaded', type='message')
     
   })
@@ -350,29 +409,29 @@ server <- function(input, output, session) {
             column(
               width=12,
               style="padding-left: 0px;padding-right: 0px;",
-              selectInput('color', 'Color:', choices=c("None", v$conditions, v$interactions), selected = input$localStorage$color, width='100%'),
-              selectInput('linetype', 'Linetype:', choices=c("None", v$conditions), selected = input$localStorage$linetype, width='100%'),
-              selectInput('shape', 'Shape:', choices=c("None", v$conditions), selected = input$localStorage$shape, width='100%'),
-              selectInput('grouping', 'Grouping:', choices=c("None", v$interactions), selected = input$localStorage$grouping, width='100%'),
-              selectInput('fw', 'Facet Wrap:', choices=c("None", v$conditions, v$interactions), selected = input$localStorage$fw, width='100%'),
+              selectInput('color', 'Color:', choices=c("None", v$conditions, v$interactions), selected = v$settings$color, width='100%'),
+              selectInput('linetype', 'Linetype:', choices=c("None", v$conditions), selected = v$settings$linetype, width='100%'),
+              selectInput('shape', 'Shape:', choices=c("None", v$conditions), selected = v$settings$shape, width='100%'),
+              selectInput('grouping', 'Grouping:', choices=c("None", v$interactions), selected = v$settings$grouping, width='100%'),
+              selectInput('fw', 'Facet Wrap:', choices=c("None", v$conditions, v$interactions), selected = v$settings$fw, width='100%'),
               uiOutput("refCurveUI")
             ),
             column(
               width=12,              
               style="padding-left: 0px;padding-right: 0px;",
-              selectInput('se', 'Standard Error Style:', choices=c("None", "Line Range", "Ribbon"), selected = input$localStorage$se, width='100%'),
-              selectInput('lvlOrderSelect', "Order Levels:", selected=input$localStorage$lvlOrderSelect, choices = c(v$conditions), width='100%'),
+              selectInput('se', 'Standard Error Style:', choices=c("None", "Line Range", "Ribbon"), selected = v$settings$se, width='100%'),
+              selectInput('lvlOrderSelect', "Order Levels:", selected=v$settings$lvlOrderSelect, choices = c(v$conditions), width='100%'),
               uiOutput("levelOrderUI", width='100%')
             )
           ),
           tags$hr(),
           splitLayout(
-            selectInput('type_plot_selector', 'Plot type:', choices =  c("Growth Plot", "Bar Plot", "Checker Plot", "Logistic Curves"), selected = input$localStorage$type_plot_selector, width='100%'),
-            selectInput('data_selector', 'Data to display:', choices = names(v$dataList), selected=input$localStorage$data_selector, width='100%'),
+            selectInput('type_plot_selector', 'Plot type:', choices =  c("Growth Plot", "Bar Plot", "Checker Plot", "Logistic Curves"), selected = v$settings$type_plot_selector, width='100%'),
+            selectInput('data_selector', 'Data to display:', choices = names(v$dataList), selected=v$settings$data_selector, width='100%'),
             
           ),
           uiOutput("sec_plot_type_UI"),
-          selectInput('param_selector', 'Parameter to display:', choices=c(names(v$params)), selected=input$localStorage$param_selector, width='100%'),
+          selectInput('param_selector', 'Parameter to display:', choices=c(names(v$params)), selected=v$settings$param_selector, width='100%'),
           splitLayout(
             cellWidths = c("10%", "90%"),
             div(),
@@ -396,46 +455,46 @@ server <- function(input, output, session) {
                 inputId = "pal", 
                 label = NULL,
                 choices = isolate(getPalette(8, v$customP)),
-                selected = orNull(input$localStorage$pal, 'Viridis'),
+                selected = orNull(v$settings$pal, 'Viridis'),
                 textColor = c(
                   rep("white", 5), rep("black", 8) 
                 )
               )
             ),
-            textInput('customColorPalette', 'Custom Color Palette:', value=paste(isolate(input$localStorage$customP), collapse=","),  placeholder = "#4b123f, #cb13b2, ...")
+            textInput('customColorPalette', 'Custom Color Palette:', value=paste(isolate(v$settings$customP), collapse=","),  placeholder = "#4b123f, #cb13b2, ...")
           ),
           splitLayout(
-            numericInput('height', 'Height (Inches):', value=orNull(isolate(input$localStorage$height), 5), min = 4, max = 50, step = 1),
-            numericInput('width', 'Width: (Inches)', value=orNull(isolate(input$localStorage$width), 10), min = 4, max = 50, step = 1),
+            numericInput('height', 'Height (Inches):', value=orNull(isolate(v$settings$height), 5), min = 4, max = 50, step = 1),
+            numericInput('width', 'Width: (Inches)', value=orNull(isolate(v$settings$width), 10), min = 4, max = 50, step = 1),
             
           ),
           tags$hr(),
           splitLayout(
-            textInput('x_axis_title', "X axis Title:", value = input$localStorage$x_axis_title),
-            selectInput('params_x_scale', 'X axis selector:', choices=v$conditions, selected=input$localStorage$params_x_scale, width='100%'),
+            textInput('x_axis_title', "X axis Title:", value = v$settings$x_axis_title),
+            selectInput('params_x_scale', 'X axis selector:', choices=v$conditions, selected=v$settings$params_x_scale, width='100%'),
           ),
-          sliderInput('range', 'X axis range:', min=0, step=0.5, max=ceiling(max(v$timeScale)), value=orNull(input$localStorage$range, c(0, ceiling(max(v$timeScale))))),
+          sliderInput('range', 'X axis range:', min=0, step=0.5, max=ceiling(max(v$timeScale)), value=orNull(v$settings$range, c(0, ceiling(max(v$timeScale))))),
           tags$hr(),
           splitLayout(
-            textInput('y_axis_title', "Y axis Title:", value = input$localStorage$y_axis_title),
-            selectInput('params_y_scale', 'Y axis selector:', choices=v$conditions, selected=input$localStorage$params_y_scale, width='100%'),
+            textInput('y_axis_title', "Y axis Title:", value = v$settings$y_axis_title),
+            selectInput('params_y_scale', 'Y axis selector:', choices=v$conditions, selected=v$settings$params_y_scale, width='100%'),
           ),
-          checkboxInput('logScale', 'Log10 Transformation', value = orNull(input$localStorage$logScale, T)),
+          checkboxInput('logScale', 'Log10 Transformation', value = orNull(v$settings$logScale, T)),
           uiOutput("logScaleUI"),
           tags$hr(),
           splitLayout(
-            sliderInput('size_l', 'Line Size:', min=0, max=4, value=orNull(input$localStorage$size_l, 1.2), step = 0.1),
-            sliderInput('size_p', 'Point Size:', min=0, max=4, value=orNull(input$localStorage$size_p, 2.5), step = 0.1),
-            sliderInput('size', 'Text size:', min=1, max=36, value=orNull(input$localStorage$size, 18))
+            sliderInput('size_l', 'Line Size:', min=0, max=4, value=orNull(v$settings$size_l, 1.2), step = 0.1),
+            sliderInput('size_p', 'Point Size:', min=0, max=4, value=orNull(v$settings$size_p, 2.5), step = 0.1),
+            sliderInput('size', 'Text size:', min=1, max=36, value=orNull(v$settings$size, 18))
           ),
           splitLayout(
-            selectInput('theme', 'Theme:', choices=themes, selected=input$localStorage$theme, width='100%'),
+            selectInput('theme', 'Theme:', choices=themes, selected=v$settings$theme, width='100%'),
             textInput('title', "Title:", value=Sys.Date())
           ),
           column(
             12, 
             align="center",
-            textAreaInput('customThemeUI', 'Add custom ggplot layers (separated by coma):', value=input$localStorage$customThemeUI, placeholder = "geom_vline(...), theme(...)")
+            textAreaInput('customThemeUI', 'Add custom ggplot layers (separated by coma):', value=v$settings$customThemeUI, placeholder = "geom_vline(...), theme(...)")
           )
         )
       )
@@ -449,8 +508,8 @@ server <- function(input, output, session) {
     if(input$data_selector != v$subTableNames[1]) {
       output$sec_plot_type_UI <- renderUI({
         list(
-          checkboxInput('secPlotMethod', paste(input$data_selector, '/', v$subTableNames[1]), value = orNull(input$localStorage$secPlotMethod, F), width='100%'),
-          checkboxInput('secPlotDisplay', paste("Display both ", input$data_selector, ' and ', v$subTableNames[1], 'plots'), value = orNull(input$localStorage$secPlotDisplay, F), width='100%')
+          checkboxInput('secPlotMethod', paste(input$data_selector, '/', v$subTableNames[1]), value = orNull(v$settings$secPlotMethod, F), width='100%'),
+          checkboxInput('secPlotDisplay', paste("Display both ", input$data_selector, ' and ', v$subTableNames[1], 'plots'), value = orNull(v$settings$secPlotDisplay, F), width='100%')
         )
       })
     }else {
@@ -471,7 +530,7 @@ server <- function(input, output, session) {
         updatePalettePicker(
           inputId = "pal", 
           choices = getPalette(8, vec),
-          selected = orNull(input$localStorage$pal, 'Viridis'),
+          selected = orNull(v$settings$pal, 'Viridis'),
           textColor = c(
             rep("white", 5), rep("black", 8) 
           )
@@ -483,29 +542,16 @@ server <- function(input, output, session) {
   
   ##### Groups #####
   observeEvent(input$groups, {
-    
     #This is called everytime the input$groups table gets modified by the user
     req(input$groups)
     
-    
-    if(v$updateLvl) {
-      v$groupsDF[-c(1,3)] <- input$localStorage$groupsDF
-      v$groupsDF[-c(1,2,3)] <- lapply(names(v$groupsDF[-c(1,2,3)]), function(colna) {
-        col <- factor(v$groupsDF[[colna]], levels=c(input$localStorage$groupsDFLvl[[colna]]))
-        return(col)
-      })
-      v$updateLvl <- F
-    }else {
+    if(!v$loadedFromSave) {
       v$groupsDF <- data.frame(hot_to_r(input$groups))
       v$groupsDF[-c(1,2,3)] <- lapply(v$groupsDF[-c(1,2,3)], factor)
     }
-    
-    v$groupsDF[-c(1,2,3)] <- lapply(names(v$groupsDF[-c(1,2,3)]), function(colna) {
-      if(any(grepl("  ", v$groupsDF[[colna]]))) {
-        showNotification(paste0('Some double spaced were found and replaced in column ', colna), type="warning")
-      }
-      return(as.factor(gsub("  ", " ", v$groupsDF[[colna]])))
-    })
+    v$loadedFromSave <- F
+  
+    v$groupsDF[-c(1,2,3)] <- removePattern(v$groupsDF[-c(1,2,3)], "  ", " ")
     
     
     v$dataList_melted <- dataMelter(v$dataList, v$groupsDF, v$timeScale)
@@ -536,7 +582,7 @@ server <- function(input, output, session) {
     output$downloads <- renderUI({
       list(
         column(12, 
-               # align="center",
+               align="left",
                tags$hr(),
                h3("Downloads :"),
                tags$style(".skin-blue .sidebar a { color: #444; }"),
@@ -551,15 +597,20 @@ server <- function(input, output, session) {
                tags$p(""),               
                downloadButton("download_png", label = "Plot (PNG)"),
                tags$p(""),
-               downloadButton("download_settings", label = "Settings"),
                tags$hr(),
-               actionButton("save_settings", label = "Save Settings Locally", icon=icon("floppy-disk")),
-
+               h3("Settings :"),
+               actionButton("saveLocally", label = "Save locally in Browser", icon=icon("floppy-disk"), style="margin-left:0px;"),
+               tags$p(""),
+               downloadButton("download_settings", label = "Download settings"),
+               tags$p(""),
+               tags$p(""),
+               tags$br(),
+               actionButton("deleteLocalSave", label = "Reset settings", icon=icon("trash"), style="margin-left:0px;", class = "btn-danger")
         )
       )
+      
     })
     
-
     
     
     output$download_df <- downloadHandler(
@@ -571,7 +622,8 @@ server <- function(input, output, session) {
     output$download_settings <- downloadHandler(
       function() {paste0(input$title, "_settings.json")},
       function(file) {
-        writeLines(jsonlite::toJSON(input$localStorage), file)
+        
+        writeLines(jsonlite::toJSON(v$settings), file)
       }
     )
     output$download_pdf <- downloadHandler(
@@ -623,8 +675,8 @@ server <- function(input, output, session) {
         output$refCurveUI <- renderUI({
           list(
             splitLayout(
-              selectInput('referenceCurve', 'Ref. Curve:', choices = c("None", isolate(levels(v$groupsDF[[input$fw]]))), selected=input$localStorage$referenceCurve, width='100%'),
-              numericInput('nRowsFacets', 'N. Rows:', value=orNull(input$localStorage$nRowsFacets, 1), min = 1, max = 10, step = 1)
+              selectInput('referenceCurve', 'Ref. Curve:', choices = c("None", isolate(levels(v$groupsDF[[input$fw]]))), selected=v$settings$referenceCurve, width='100%'),
+              numericInput('nRowsFacets', 'N. Rows:', value=orNull(v$settings$nRowsFacets, 1), min = 1, max = 10, step = 1)
             )
           )
         })
@@ -644,7 +696,7 @@ server <- function(input, output, session) {
       }else {
         output$logScaleUI <- renderUI({
           list(
-            sliderInput('yAxisRange', 'Y axis range:', min=0, step=0.1, max=ceiling(max(v$dataList_melted[[1]]$value, na.rm=T)), value=c(0, ceiling(max(v$dataList_melted[[1]]$value, na.rm=T))))
+            sliderInput('yAxisRange', 'Y axis range:', min=0, step=0.1, max=ceiling(max(v$dataList_melted[[1]]$value, na.rm=T)), value=c(0, max(v$dataList_melted[[1]]$value, na.rm=T)*1.3))
           )
         })
       }
@@ -652,106 +704,7 @@ server <- function(input, output, session) {
     reactPlot()
   })
   
-  ##### Local Storage #####
   
-  observeEvent(input$loadLocalStorage, {
-    req(v$groups)
-    repl <- as.data.frame(input$localStorage$groupsDF)
-    int <- intersect(colnames(v$groupsDF), colnames(repl))
-    if(nrow(repl) != nrow(v$groups)) {
-      showNotification('Number of rows differs from save and current file', type='error')
-      return()
-    }
-    v$groups[,int] <- repl[,int]
-    v$updateLvl <- T
-  })
-  
-  
-  observeEvent(input$file_settings, {
-    saveDF <- fromJSON(input$file_settings$datapath)
-    updateStore(session, name = "color", value = saveDF$color)
-    updateStore(session, name = "linetype", value = saveDF$linetype)
-    updateStore(session, name = "shape", value = saveDF$shape)
-    updateStore(session, name = "grouping", value = saveDF$grouping)
-    updateStore(session, name = "fw", value = saveDF$fw)
-    updateStore(session, name = "referenceCurve", value = saveDF$referenceCurve)
-    updateStore(session, name = "nRowsFacets", value = saveDF$nRowsFacets)
-    updateStore(session, name = "se", value = saveDF$se)
-    updateStore(session, name = "conditionsUI_Input", value = saveDF$conditionsUI_Input )
-    updateStore(session, name = "customP", value = saveDF$customP)
-    updateStore(session, name = "groupsDF", value = saveDF$groupsDF)
-    updateStore(session, name = "groupsDFLvl", value = saveDF$groupsDFLvl)
-    updateStore(session, name = "height", value = saveDF$height)
-    updateStore(session, name = "width", value = saveDF$width)
-    updateStore(session, name = "pal", value = saveDF$pal)
-    updateStore(session, name = "norm", value = saveDF$norm)
-    updateStore(session, name = "norm_baseOD", value = saveDF$norm_baseOD)
-    updateStore(session, name = "techAggr", value = saveDF$techAggr)
-    updateStore(session, name = "x_axis_title", value = saveDF$x_axis_title)
-    updateStore(session, name = "y_axis_title", value = saveDF$y_axis_title)
-    updateStore(session, name = "customThemeUI", value = saveDF$customThemeUI)
-    updateStore(session, name = "type_plot_selector", value = saveDF$type_plot_selector)
-    updateStore(session, name = "lvlOrderSelect", value = saveDF$lvlOrderSelect)
-    # updateStore(session, name = "logScale", value = saveDF$logScale)
-    updateStore(session, name = "size_l", value = saveDF$size_l)
-    updateStore(session, name = "size_p", value = saveDF$size_p)
-    updateStore(session, name = "theme", value = saveDF$theme)
-    updateStore(session, name = "params_x_scale", value = saveDF$params_x_scale)
-    updateStore(session, name = "params_y_scale", value = saveDF$params_y_scale)
-    updateStore(session, name = "range", value = saveDF$range)
-    updateStore(session, name = "data_selector", value = saveDF$data_selector)
-    updateStore(session, name = "param_selector", value = saveDF$param_selector)
-    updateStore(session, name = "secPlotMethod", value = saveDF$secPlotMethod)
-    updateStore(session, name = "norm_lagPhase", value = saveDF$norm_lagPhase)
-    
-    showNotification('Successfully imported settings file', type='message')
-    
-    
-  })
-  
-  
-  observeEvent(input$save_settings, {
-    isolate({
-      updateStore(session, name = "color", value = input$color)
-      updateStore(session, name = "linetype", value = input$linetype)
-      updateStore(session, name = "shape", value = input$shape)
-      updateStore(session, name = "grouping", value = input$grouping)
-      updateStore(session, name = "fw", value = input$fw)
-      updateStore(session, name = "referenceCurve", value = input$referenceCurve)
-      updateStore(session, name = "nRowsFacets", value = input$nRowsFacets)
-      updateStore(session, name = "se", value = input$se)
-      updateStore(session, name = "conditionsUI_Input", value = input$conditionsUI_Input )
-      updateStore(session, name = "customP", value = v$customP)
-      updateStore(session, name = "groupsDF", value = v$groupsDF[-which(names(v$groupsDF) %in% c("Wells", "Preview"))])
-      updateStore(session, name = "groupsDFLvl", value = lapply(v$groupsDF[-c(1,2,3)], levels))
-      updateStore(session, name = "height", value = input$height)
-      updateStore(session, name = "width", value = input$width)
-      updateStore(session, name = "pal", value = input$pal)
-      updateStore(session, name = "norm", value = input$norm)
-      updateStore(session, name = "norm_baseOD", value = input$norm_baseOD)
-      updateStore(session, name = "techAggr", value = input$techAggr)
-      updateStore(session, name = "x_axis_title", value = input$x_axis_title)
-      updateStore(session, name = "y_axis_title", value = input$y_axis_title)
-      updateStore(session, name = "customThemeUI", value = input$customThemeUI)
-      updateStore(session, name = "type_plot_selector", value = input$type_plot_selector)
-      updateStore(session, name = "lvlOrderSelect", value = input$lvlOrderSelect)
-      # updateStore(session, name = "logScale", value = input$logScale)
-      updateStore(session, name = "size_l", value = input$size_l)
-      updateStore(session, name = "size_p", value = input$size_p)
-      updateStore(session, name = "theme", value = input$theme)
-      updateStore(session, name = "params_x_scale", value = input$params_x_scale)
-      updateStore(session, name = "params_y_scale", value = input$params_y_scale)
-      updateStore(session, name = "range", value = input$range)
-      updateStore(session, name = "data_selector", value = input$data_selector)
-      updateStore(session, name = "param_selector", value = input$param_selector)
-      updateStore(session, name = "secPlotMethod", value = input$secPlotMethod)
-      updateStore(session, name = "norm_lagPhase", value = input$norm_lagPhase)
-    })
-    
-    showNotification('Successfully saved locally', type='message')
-    
-    
-  })
   
   ##### Parameters #####
   observeEvent(input$auc_window, {
@@ -805,15 +758,15 @@ server <- function(input, output, session) {
   
   ##### lvl Order Sorter #####
   observeEvent(input$lvlOrderSorted, {
-    v$groupsDF[input$lvlOrderSelect] <- factor(v$groupsDF[[input$lvlOrderSelect]], levels = c(input$lvlOrderSorted))
-    v$groupDF_subset[input$lvlOrderSelect] <- factor(v$groupDF_subset[[input$lvlOrderSelect]], levels = c(input$lvlOrderSorted))
-    #update dataframes levels based on level order
-    v$dataList_melted <- lapply(v$dataList_melted, function(df) {
-      df[input$lvlOrderSelect] <- factor(df[[input$lvlOrderSelect]], levels=c(input$lvlOrderSorted))
-      return(df)
+    isolate({
+      v$groupsDF[input$lvlOrderSelect] <- factor(v$groupsDF[[input$lvlOrderSelect]], levels = c(input$lvlOrderSorted))
+      v$groupDF_subset[input$lvlOrderSelect] <- factor(v$groupDF_subset[[input$lvlOrderSelect]], levels = c(input$lvlOrderSorted))
+      #update dataframes levels based on level order
+      v$dataList_melted <- lapply(v$dataList_melted, function(df) {
+        df[input$lvlOrderSelect] <- factor(df[[input$lvlOrderSelect]], levels=c(input$lvlOrderSorted))
+        return(df)
+      })
     })
-        
-    
   })
   
   ##### Plot #####
@@ -874,6 +827,7 @@ server <- function(input, output, session) {
       return(p)
     }, width=reactive(input$width*72), height = reactive(input$height*72))
   }
+  
   
 }
 
