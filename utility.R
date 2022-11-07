@@ -1,7 +1,7 @@
 themes <- c("BW" , "Classic", "Light", "Minimal", "Gray")
 react <- c("conditions", "rawdata_list", "dataList", "groups", "interactions", "params_list", "groupDF_subset")
 
-getFile <- function(datapath) {
+getFile <- function(datapath, output) {
   rawTableList <- list()
   if(file_ext(datapath) == "txt") {
     rawdata <-  read.table(datapath, sep="\t", header=T, dec=",")
@@ -20,14 +20,33 @@ getFile <- function(datapath) {
     if(any(grepl("Synergy", rawdata))) {
       #First column empty in synergy software => might wanna double check that
       indexStart <- which(rawdata[-1]=='Time')
-      indexStop <- which(rawdata == "Results")
-      
-      rawdata <- rawdata[1:indexStop,]
+      if(any(which(rawdata == "Results"))) {
+        indexStop <- which(rawdata == "Results")
+        rawdata <- rawdata[1:indexStop,]
+      }
       biotek <- T
     }else {
       indexStart <- which(rawdata=='Cycle Nr.')
     }
     
+    # showModal(modalDialog(
+    #   title="Could not find any data table",
+    #   rHandsontableOutput("test", height = '50vh'),
+    #   easyClose = FALSE,
+    #   footer = tagList(
+    #     actionButton("ok", "OK")
+    #   )
+    # 
+    # ))
+    # output$test <- renderRHandsontable({
+    #   rhandsontable(
+    #     data.frame(rawdata),
+    #     rowHeaders=NULL,
+    #     selectCallback = TRUE,
+    #     fillHandle = list(direction='vertical', autoInsertRow=FALSE)
+    #   ) %>%
+    #     hot_table(highlightCol = T, highlightRow = T, allowRowEdit =F)
+    # })
     for (i in 1:length(indexStart)) {
       if(i == length(indexStart)) {
         subTableDF <- rawdata[indexStart[i]:nrow(rawdata),]
@@ -41,20 +60,25 @@ getFile <- function(datapath) {
       #Setting first row as colnames
       colnames(subTableDF) <- subTableDF[1,]
       subTableDF <- subTableDF[-c(1),]
+      
       #Removing non-numeric rows and columns
-      subTableDF <- suppressWarnings(sapply(subTableDF, as.numeric))
+      subTableDF <- as.data.frame(suppressWarnings(sapply(subTableDF, as.numeric)))
+      
       #removing columns or rows with only NA in it
       subTableDF <- subTableDF[, colSums(is.na(subTableDF)) != nrow(subTableDF)]
       subTableDF <- subTableDF[rowSums(is.na(subTableDF)) != ncol(subTableDF),]
       
-      
       #Removing Temp and Cycle columns
       rawTableList$time <- subTableDF[, grep("time", tolower(colnames(subTableDF)))]/3600
-      subTableDF <- subTableDF[, -grep("temp|time|cycle|t..", tolower(colnames(subTableDF)))]
+      
+      
+      rawTableList$time <- rawTableList$time[!is.na(rawTableList$time)]
+      subTableDF <- subTableDF[1:length(rawTableList$time),]
+      
+      subTableDF <- subTableDF[, -grep("temp|cycle|time|t..", tolower(colnames(subTableDF)))]
       if(biotek) {
         rawTableList$time <- rawTableList$time*86400
       }
-      
       name <- rawdata[indexStart[i]-1,1]
       if(is.na(name) | name == "") {
         #if first subtable not named, it is named OD 
