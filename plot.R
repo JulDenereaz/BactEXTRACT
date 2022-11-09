@@ -1,6 +1,10 @@
 
 makePlot <- function(dfRaw, input, customP, ylabel="", od = T) {
   # getting upper, lower bound from SE, and calculate log10 if necessary
+  if(!is.numeric(dfRaw$value)) {
+    return()
+  }
+  
   df <- getUpLo(dfRaw, input$logScale && od)
   
   if(!is.null(input$referenceCurve) && input$referenceCurve != "None") {

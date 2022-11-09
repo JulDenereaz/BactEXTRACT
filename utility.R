@@ -1,10 +1,10 @@
 themes <- c("BW" , "Classic", "Light", "Minimal", "Gray")
 react <- c("conditions", "rawdata_list", "dataList", "groups", "interactions", "params_list", "groupDF_subset")
 
-getFile <- function(datapath, output) {
+getFile <- function(fileData, lb, nfiles) {
   rawTableList <- list()
-  if(file_ext(datapath) == "txt") {
-    rawdata <-  read.table(datapath, sep="\t", header=T, dec=",")
+  if(file_ext(fileData$datapath) == "txt") {
+    rawdata <-  read.table(fileData$datapath, sep="\t", header=T, dec=",")
     rawdata <- rawdata[,colSums(is.na(rawdata))<nrow(rawdata)]
     rawdata <- rawdata[complete.cases(rawdata[,1]),]
     rawdata <- as.data.frame(sapply(rawdata, as.numeric))
@@ -12,8 +12,7 @@ getFile <- function(datapath, output) {
     rawTableList[["OD"]] <- rawdata[-which(names(rawdata) == "time")]
     
   }else {
-    rawdata <- read.xlsx2(file=datapath, sheetIndex=1, as.data.frame=T, header=F, colIndex = 1:300)
-    # rawdata <- as.data.frame(read_excel(path=datapath, col_names = F,progress = T))
+    rawdata <- read.xlsx2(file=fileData$datapath, sheetIndex=1, as.data.frame=T, header=F, colIndex = 1:300)
     #rawTableList is a list containing each table, starting with OD, and any additional measurement table, such as RLU, luminescence, or another OD...
     #If tecan is biotek
     biotek <- F
@@ -28,25 +27,9 @@ getFile <- function(datapath, output) {
     }else {
       indexStart <- which(rawdata=='Cycle Nr.')
     }
-    
-    # showModal(modalDialog(
-    #   title="Could not find any data table",
-    #   rHandsontableOutput("test", height = '50vh'),
-    #   easyClose = FALSE,
-    #   footer = tagList(
-    #     actionButton("ok", "OK")
-    #   )
-    # 
-    # ))
-    # output$test <- renderRHandsontable({
-    #   rhandsontable(
-    #     data.frame(rawdata),
-    #     rowHeaders=NULL,
-    #     selectCallback = TRUE,
-    #     fillHandle = list(direction='vertical', autoInsertRow=FALSE)
-    #   ) %>%
-    #     hot_table(highlightCol = T, highlightRow = T, allowRowEdit =F)
-    # })
+    if(length(indexStart) == 0) {
+      stop(paste0("Could not find the start of the data table in: ", fileData$name))
+    }
     for (i in 1:length(indexStart)) {
       if(i == length(indexStart)) {
         subTableDF <- rawdata[indexStart[i]:nrow(rawdata),]
@@ -83,13 +66,19 @@ getFile <- function(datapath, output) {
       if(is.na(name) | name == "") {
         #if first subtable not named, it is named OD 
         name <- ifelse(i == 1, "OD", i)
+        showNotification(paste0('The 1st table of ', fileData$name, ' was named "OD" by default.'), type="warning")
       }
       
+      if(nrow(as.data.frame(subTableDF)) == 0) {
+        stop(paste0("N. rows of ", name, "  dataframe is 0 in ", fileData$name))
+      }
       #Append to the list
       rawTableList[[name]] <- as.data.frame(subTableDF)
+      lb$inc((1/(nfiles))/length(indexStart), detail = "")
     }
     
   }
+  
   return(rawTableList)
 }
 
@@ -116,7 +105,12 @@ mergeSubTables <- function(rawdata_file_list, subNames, fileNames, nr) {
 }
 
 
-
+detectIfOD <- function(df) {
+  if(max(df) < 2) {
+    return(T)
+  }
+  return(F)
+}
 
 
 
@@ -323,8 +317,8 @@ addReferenceCurve <- function(refLevel, fw, df) {
 
 
 normalise <- function(df=NULL, method=NULL, baseOD=NULL, wells=NULL) {
-  if(is.null(df) || is.null(method) || is.null(baseOD)) {
-    return()
+  if(!detectIfOD(df)) {
+    return(df)
   }
 
   if(method == 'Mininum') {

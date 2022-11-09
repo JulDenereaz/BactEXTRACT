@@ -78,7 +78,10 @@ ui <- dashboardPage(
             box(
               height='50vh',
               width=3,
-              title="1. Settings",
+              title= p("2. Settings", 
+                       actionButton('previewTable', 'Preview Imported Tables', icon = icon('magnifying-glass'),
+                                    class = 'btn-xs', title = '', style = "position: absolute; right: 10px")
+              ),
               status = 'primary',
               div(style = 'overflow:auto;height:calc(50vh - 60px)',
                   uiOutput("conditionsUI")
@@ -108,7 +111,7 @@ ui <- dashboardPage(
             ),
             box(
               width=12,
-              title="5. Plots",
+              title= NULL,
               status = 'primary',
               height = '100vh',
               div(
@@ -223,7 +226,7 @@ server <- function(input, output, session) {
         v[[reactVal]] <- NULL
       })
       output$graph_optionsUI <- NULL
-      # output$themeUI <- NULL
+      output$themeUI <- NULL
       output$plot <- NULL
       output$groups <- NULL
     }
@@ -266,55 +269,102 @@ server <- function(input, output, session) {
         )
       )
     })
-
-    
-    tryCatch({
-        rawdata_file_list <- do.call(list, lapply(input$files$datapath, function(file) {
-          obj <- getFile(file)
-          return(obj)
-        }))
-        #If cannot read the file, throw an UI mini-screen to let the user choose which cell is the start of the table
-        names(rawdata_file_list) <- input$files$name
-      },
-      error = function(e) {
-        stop(safeError(e))
+    progress <- shiny::Progress$new()
+    on.exit(progress$close())
+    progress$set(message = "Reading files...", value = 0)
+    rawdata_file_list <- do.call(list, lapply(1:nrow(input$files), function(r) {
+          obj <- tryCatch({
+            getFile(input$files[r,],  lb=progress, n=length(input$files$datapath))
+            },
+            error = function(e) {
+              showNotification(e$message, type='error',closeButton = T, duration = NULL)
+              return(NULL)
+            })
+    }))
+    names(rawdata_file_list) <- input$files$name
+    if(list(NULL) %in% rawdata_file_list) {
+      
+      rawdata_file_list[sapply(rawdata_file_list, is.null)] <- NULL
+      # v$rawdata_list <- NULL
+      # redo getFile for only that file with the range as another parameter
+      # showModal(modalDialog(
+      #   title=e$message,
+      #   rHandsontableOutput("subTable_SelectData", height = '70vh'),
+      #   easyClose = FALSE,
+      #   footer = tagList(
+      #     actionButton("processNewTable", "OK", class='btn-warning')
+      #   )
+      #   
+      # ))
+      # output$subTable_SelectData <- renderRHandsontable({
+      #   rhandsontable(
+      #     read.xlsx2(file=input$files[r,]$datapath, sheetIndex=1, as.data.frame=T, header=F, colIndex = 1:300),
+      #     rowHeaders=NULL,
+      #     selectCallback = TRUE,
+      #     fillHandle = list(direction='vertical', autoInsertRow=FALSE)
+      #   ) %>%
+      #     hot_table(highlightCol = T, highlightRow = T, allowRowEdit =F)
+      # })
+      if(length(rawdata_file_list) == 0) {
+        return()
       }
-    )
-    
+      # return()
+    }
     
     timeCols <- lapply(rawdata_file_list, function(rawdt) {
       return(rawdt$time)
     })
     v$timeScale <- timeCols[[which.max(lengths(timeCols))]]
     v$subTableNames <- names(rawdata_file_list[[1]])[-1] #Not looping through the time vector
-    v$rawdata_list <- mergeSubTables(rawdata_file_list, v$subTableNames, isolate(input$files$name), length(v$timeScale))
+    v$rawdata_list <- mergeSubTables(rawdata_file_list, v$subTableNames, names(rawdata_file_list), length(v$timeScale))
+    
+    v$isOD <- lapply(v$rawdata_list, function(table) {
+      return(detectIfOD(table))
+    })
+    
     
     #rawdata_list contains the merged files sub-tables, OD first, then followed by any additional luminescence/RLU etc.. tables
+
     
-    # showModal(modalDialog(
-    #   title="Could not find any data table",
-    #   textInput('excelCell', "Please enter the :"),
-    #   easyClose = FALSE,
-    #   footer = tagList(
-    #     actionButton("ok", "OK")
-    #   )
-    # ))
     if(!is.null(input$localStorage$settings)) {
       v$settings <- input$localStorage$settings
       showNotification("Loaded Local Settings")
     }
     
     
-    showNotification('File(s) successfully uploaded', type='message')
-    
+    showNotification(paste0(length(rawdata_file_list), ' file(s) successfully uploaded'), type='message')
   })
   
   observeEvent(input$ok, {
+    # print(input$test_select$select$r)
     removeModal()
+  })  
+  # observeEvent(input$processNewTable, {
+  #   print(input$subTable_SelectData_select$select$r)
+  #   removeModal()
+  # })
+  
+  observeEvent(input$previewTable, {
+    req(v$rawdata_list)
+    showModal(modalDialog(
+      title="Data Table Preview",
+      selectInput('previewSubTable_Select', 'Sub-table:', choices=names(v$rawdata_list)),
+      rHandsontableOutput("previewData", height = '50vh'),
+      easyClose = TRUE,
+      footer = tagList(
+        actionButton("ok", "OK")
+      )
+    ))
+    output$previewData <- renderRHandsontable({
+      rhandsontable(
+        data.frame(cbind(data.frame(time=v$timeScale), v$rawdata_list[[input$previewSubTable_Select]])),
+        rowHeaders=NULL,
+        fillHandle = list(direction='vertical', autoInsertRow=FALSE)
+      ) %>%
+        hot_table(highlightCol = T, highlightRow = T, allowRowEdit =F)
+    })
   })
-  
-  
-  
+
   
   toListenNormMerge <- reactive({
     list(input$techAggr, input$norm)
@@ -342,10 +392,9 @@ server <- function(input, output, session) {
   })
   
   
-
-  
   ##### Update button Panel #####
   observeEvent(input$updateCond, {
+    req(v$rawdata_list)
     if(input$conditionsUI_Input == "") {
       showNotification('You need at lest one condition', type='warning')
     }
@@ -375,9 +424,11 @@ server <- function(input, output, session) {
     
     v$interactions <- getInteractions(v$conditions)
     
-    # vertical normalisation
+    # vertical normalisation, only if OD
     v$dataList <- aggdata_list
-    v$dataList[[1]] <- normalise(isolate(v$dataList[[1]]), input$norm, input$norm_baseOD, input$normByWells)
+    v$dataList <- lapply(v$dataList, function(dt) {
+      return(normalise(dt, input$norm, input$norm_baseOD, input$normByWells))
+    })
     
     # horizontal normalisation
     v$dataList <- lagNorm(isolate(v$dataList), input$norm_lagPhase)
@@ -398,6 +449,8 @@ server <- function(input, output, session) {
         hot_col(col="Preview",copyable=F, renderer=htmlwidgets::JS("renderSparkline"), valign='htCenter', allowColEdit=F, readOnly=T) %>%
         hot_table(highlightCol = T, highlightRow = T, allowRowEdit =F)
     })
+    
+    ##Change keepWell to T/F
     
     
     ##### UI graph options #####
@@ -505,11 +558,13 @@ server <- function(input, output, session) {
   })
   
   observeEvent(input$data_selector, {
-    if(input$data_selector != v$subTableNames[1]) {
+    if(!v$isOD[[input$data_selector]]) {
       output$sec_plot_type_UI <- renderUI({
         list(
-          checkboxInput('secPlotMethod', paste(input$data_selector, '/', v$subTableNames[1]), value = orNull(v$settings$secPlotMethod, F), width='100%'),
-          checkboxInput('secPlotDisplay', paste("Display both ", input$data_selector, ' and ', v$subTableNames[1], 'plots'), value = orNull(v$settings$secPlotDisplay, F), width='100%')
+          splitLayout(
+            selectInput('secPlotMethod', paste0('Normalize ', input$data_selector, ' by:'), choices=c("None", v$subTableNames[which(unlist(v$isOD))])),
+            selectInput('secPlotDisplay', 'Combine Plot with:', choices=c("None", v$subTableNames[which(unlist(v$isOD))]))
+          )
         )
       })
     }else {
@@ -605,7 +660,11 @@ server <- function(input, output, session) {
                tags$p(""),
                tags$p(""),
                tags$br(),
-               actionButton("deleteLocalSave", label = "Reset settings", icon=icon("trash"), style="margin-left:0px;", class = "btn-danger")
+               actionButton("deleteLocalSave", label = "Reset settings", icon=icon("trash"), style="margin-left:0px;", class = "btn-danger"),
+               bsTooltip("saveLocally", "Save the current settings in your web-browser local storage", placement = "bottom", trigger = "hover", options = NULL),
+               bsTooltip("download_settings", "Download a .json file containing your current settings", placement = "bottom", trigger = "hover", options = NULL),
+               bsTooltip("deleteLocalSave", "Reset current settings to defaults, and delete web-browser local storage of BactEXTRACT", placement = "bottom", trigger = "hover", options = NULL)
+               
         )
       )
       
@@ -711,6 +770,10 @@ server <- function(input, output, session) {
     
     output$plot_auc_window <- renderPlot({
       # df <- isolate(v$dataList_melted[[1]])
+      if(length(v$dataList[[1]]) == 0) {
+        return()
+      }
+      
       df <- melt(cbind(data.frame(time=v$timeScale), v$dataList[[1]]),id="time")
       p <- ggplot(data=df, aes_string(x="time", y="value", group="variable")) +
         geom_line(size=1.2, alpha=0.7) +
@@ -736,8 +799,8 @@ server <- function(input, output, session) {
     progress$set(message = "Calculating Parameters", value = 0)
     dt <- v$dataList
     #If RLU/OD is selected, normalise the RLU table by OD table
-    if(!is.null(input$secPlotMethod) && input$secPlotMethod) {
-      dt[[input$data_selector]] <- dt[[input$data_selector]]/df[[1]]
+    if(!is.null(input$secPlotMethod) && input$secPlotMethod != "None") {
+      dt[[input$data_selector]] <- dt[[input$data_selector]]/df[[input$secPlotMethod]]
     }
     n <- length(dt)
     v$params_list <- lapply(dt, function(subTable) {
@@ -778,36 +841,28 @@ server <- function(input, output, session) {
     output$plot <- renderPlot({
       # req(input$type_plot_selector)
       req(input$yAxisRange)
-      df <- v$dataList_melted[[1]]
       
       if(input$type_plot_selector == "Growth Plot") {
-        pOD <- makePlot(df, input, isolate(v$customP), od=T)
+        df <- v$dataList_melted[[input$data_selector]]
         
-        # return(plot_exception("sorry, no data is found."))
+        text <- ""
         
-        if(!is.null(input$secPlotDisplay) && input$data_selector != v$subTableNames[[1]]) {
-          dfSec <- v$dataList_melted[[input$data_selector]]
-          text <- input$data_selector
-          
-          #if RLU/OD
-          if(input$secPlotMethod) {
-            dfSec$value <- isolate(as.numeric(dfSec$value)/as.numeric(v$dataList_melted[[1]]$value))
-            text <- paste(text, "/", v$subTableNames[[1]])
-          }
-          
-          pSec <- makePlot(dfSec, input, isolate(v$customP), text, od=F)
-          
-          
-          if(input$secPlotDisplay) {
-            pSec <- ggarrange(pOD, pSec, ncol = 1, nrow = 2, align = "v", common.legend = T, legend = "right")
-          }
-          p <- pSec
-          return(p)
+        #Normalization by other subtable
+        if(!is.null(input$secPlotMethod) && input$secPlotMethod != "None") {
+          df$value <- isolate(as.numeric(df$value)/as.numeric(v$dataList_melted[[input$secPlotMethod]]$value))
+          text <- paste(input$data_selector, "/", input$secPlotMethod)
         }
         
+        p <- makePlot(df, input, isolate(v$customP), ylabel=text, od=v$isOD[[input$data_selector]])
         
-        p <- pOD
-        
+        #If displaying two subtables
+        if(!is.null(input$secPlotDisplay) && input$secPlotDisplay != "None") {
+          pOD <- makePlot(v$dataList_melted[[input$secPlotDisplay]], input, isolate(v$customP), od=v$isOD[[input$secPlotDisplay]])
+          
+          p <- ggarrange(pOD, p, ncol = 1, nrow = 2, align = "v", common.legend = T, legend = "right")
+        }
+
+        return(p)
         
       }else {
         req(v$params_list) #display they need to update calculation
