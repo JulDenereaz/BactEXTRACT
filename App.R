@@ -755,7 +755,7 @@ server <- function(input, output, session) {
       }else {
         output$logScaleUI <- renderUI({
           list(
-            sliderInput('yAxisRange', 'Y axis range:', min=0, step=0.1, max=ceiling(max(v$dataList_melted[[1]]$value, na.rm=T)), value=c(0, max(v$dataList_melted[[1]]$value, na.rm=T)*1.3))
+            sliderInput('yAxisRange', 'Y axis range:', min=0, step=0.1, max=ceiling(max(v$dataList_melted[[input$data_selector]]$value, na.rm=T)), value=c(0, max(v$dataList_melted[[input$data_selector]]$value, na.rm=T)*1.3))
           )
         })
       }
