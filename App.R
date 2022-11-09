@@ -562,8 +562,8 @@ server <- function(input, output, session) {
       output$sec_plot_type_UI <- renderUI({
         list(
           splitLayout(
-            selectInput('secPlotMethod', paste0('Normalize ', input$data_selector, ' by:'), choices=c("None", v$subTableNames[which(unlist(v$isOD))])),
-            selectInput('secPlotDisplay', 'Combine Plot with:', choices=c("None", v$subTableNames[which(unlist(v$isOD))]))
+            selectInput('secPlotMethod', paste0('Normalize ', input$data_selector, ' by:'), choices=c("None", v$subTableNames[which(unlist(v$isOD))]), selected=v$settings$secPlotMethod),
+            selectInput('secPlotDisplay', 'Combine Plot with:', choices=c("None", v$subTableNames[which(unlist(v$isOD))]), selected=v$settings$secPlotDisplay)
           )
         )
       })
