@@ -78,7 +78,6 @@ getFile <- function(fileData, lb, nfiles) {
     }
     
   }
-  
   return(rawTableList)
 }
 
@@ -106,7 +105,7 @@ mergeSubTables <- function(rawdata_file_list, subNames, fileNames, nr) {
 
 
 detectIfOD <- function(df) {
-  if(max(df) < 2) {
+  if(max(df, na.rm=T) < 2) {
     return(T)
   }
   return(F)

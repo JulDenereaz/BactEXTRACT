@@ -322,7 +322,6 @@ server <- function(input, output, session) {
       return(detectIfOD(table))
     })
     
-    
     #rawdata_list contains the merged files sub-tables, OD first, then followed by any additional luminescence/RLU etc.. tables
 
     
@@ -532,7 +531,7 @@ server <- function(input, output, session) {
             textInput('y_axis_title', "Y axis Title:", value = v$settings$y_axis_title),
             selectInput('params_y_scale', 'Y axis selector:', choices=v$conditions, selected=v$settings$params_y_scale, width='100%'),
           ),
-          checkboxInput('logScale', 'Log10 Transformation', value = orNull(v$settings$logScale, T)),
+          checkboxInput('logScale', 'Log10 Scale', value = orNull(v$settings$logScale, T)),
           uiOutput("logScaleUI"),
           tags$hr(),
           splitLayout(
@@ -749,7 +748,7 @@ server <- function(input, output, session) {
       if(input$logScale) {
         output$logScaleUI <- renderUI({
           list(
-            sliderTextInput('yAxisRange', 'Y axis range:', choices = c(0.0001, 0.001, 0.01, 0.1, 1, 10), selected =c(0.001, 1),  grid=T)
+            sliderTextInput('yAxisRange', 'Y axis range:', choices = 10^c(1:6)/100000, selected =c(0.001, 1),  grid=T)
           )
         })
       }else {
