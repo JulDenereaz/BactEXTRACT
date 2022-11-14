@@ -533,6 +533,7 @@ saveUpdate <- function(session, df, customP=NULL, groupsDF=NULL, groupsDFLvl=NUL
   updateStore(session, name = "param_selector", value = df$param_selector)
   updateStore(session, name = "secPlotMethod", value = df$secPlotMethod)
   updateStore(session, name = "norm_lagPhase", value = df$norm_lagPhase)
+  updateStore(session, name = "normByWells", value = df$normByWells)
 }
 
 
@@ -579,6 +580,7 @@ updateSettings <- function(df, customP=NULL, groupsDF=NULL, groupsDFLvl=NULL) {
   settings$param_selector <-  df$param_selector
   settings$secPlotMethod <-  df$secPlotMethod
   settings$norm_lagPhase <-  df$norm_lagPhase
+  settings$normByWells <-  df$normByWells
   return(settings)
 }
 
