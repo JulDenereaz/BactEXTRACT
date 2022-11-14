@@ -230,45 +230,7 @@ server <- function(input, output, session) {
       output$plot <- NULL
       output$groups <- NULL
     }
-    output$conditionsUI <- renderUI({
-      fluidPage(
-        list(
-          splitLayout(
-            selectInput('techAggr', 'Tech. Repl. Merge:', choices=c("None", "Horizontal", "Vertical"), selected = v$settings$techAggr),
-            numericInput('techAggrN', 'By:', value=3, min=2)
-          ),
-          bsTooltip("techAggr", "Average adjacent wells together (A1-A2-A3 or A1-B1-C1)", placement = "left", trigger = "hover", options = NULL),
-          div(
-            style="padding-left: 0px;padding-right: 0px;",
-            tags$label("Normalisation:")
-          ),
-          splitLayout(
-            selectInput('norm', NULL, choices=c('Mininum', '1st well', 'Min(wells 1-2-3)', 'Specific Well(s)', "No Normalisation"), selected = v$settings$norm),
-            selectInput('norm_baseOD', NULL, choices=c(0, 0.001, 0.002, 0.003, 0.004), selected = orNull(v$settings$norm_baseOD, 0.001)),
-          ),
-          uiOutput('normByWellsUI'),
-          splitLayout(
-            numericInput('norm_lagPhase', "Lag Phase normalisation Threshold:", value=orNull(v$settings$norm_lagPhase, 0), min=0, max=1, step=0.0001),
-            div(
-              style="padding-left: 0px;padding-right: 0px;",
-              # tags$label("Lag Phase normalisation:")
-            )
-          #   textInput('norm_formula', 'Additional Formula f(well):', placeholder="well+1")
-          ),
-          
-          
-          bsTooltip("norm", "Method of Normalisation", placement = "left", trigger = "hover", options = NULL),
-          bsTooltip("norm_lagPhase", "Lag phase will be truncated until OD is higher than this value", placement = "left", trigger = "hover", options = NULL),
-          bsTooltip("norm_baseOD", "This value will be added to each well", placement = "left", trigger = "hover", options = NULL),
-          tags$hr(),
-          HTML("<b>Enter Conditions:</b>"),
-          textInput('conditionsUI_Input', NULL, value=v$settings$conditionsUI_Input, placeholder = "Strain, Treatment, ..."),
-          bsTooltip("conditionsUI_Input", "Key words with which you can separate your growth curves", placement = "bottom", trigger = "hover", options = NULL),
-          actionButton("updateCond", "Apply Modifications", icon = icon("gears"),class = "btn-xl", title = "Update")
-          # column(12, align="center", p('(Cannot start with number, separated by coma)')),     
-        )
-      )
-    })
+
     progress <- shiny::Progress$new()
     on.exit(progress$close())
     progress$set(message = "Reading files...", value = 0)
@@ -332,6 +294,47 @@ server <- function(input, output, session) {
     
     
     showNotification(paste0(length(rawdata_file_list), ' file(s) successfully uploaded'), type='message')
+    
+    output$conditionsUI <- renderUI({
+      fluidPage(
+        list(
+          splitLayout(
+            selectInput('techAggr', 'Tech. Repl. Merge:', choices=c("None", "Horizontal", "Vertical"), selected = v$settings$techAggr),
+            numericInput('techAggrN', 'By:', value=3, min=2)
+          ),
+          bsTooltip("techAggr", "Average adjacent wells together (A1-A2-A3 or A1-B1-C1)", placement = "left", trigger = "hover", options = NULL),
+          div(
+            style="padding-left: 0px;padding-right: 0px;",
+            tags$label("Normalisation:")
+          ),
+          splitLayout(
+            selectInput('norm', NULL, choices=c('Mininum', '1st well', 'Min(wells 1-2-3)', 'Specific Well(s)', "No Normalisation"), selected = v$settings$norm),
+            selectInput('norm_baseOD', NULL, choices=c(0, 0.001, 0.002, 0.003, 0.004), selected = orNull(v$settings$norm_baseOD, 0.001)),
+          ),
+          uiOutput('normByWellsUI'),
+          splitLayout(
+            numericInput('norm_lagPhase', "Lag Phase normalisation Threshold:", value=orNull(v$settings$norm_lagPhase, 0), min=0, max=1, step=0.0001),
+            div(
+              style="padding-left: 0px;padding-right: 0px;",
+              # tags$label("Lag Phase normalisation:")
+            )
+            #   textInput('norm_formula', 'Additional Formula f(well):', placeholder="well+1")
+          ),
+          
+          
+          bsTooltip("norm", "Method of Normalisation", placement = "left", trigger = "hover", options = NULL),
+          bsTooltip("norm_lagPhase", "Lag phase will be truncated until OD is higher than this value", placement = "left", trigger = "hover", options = NULL),
+          bsTooltip("norm_baseOD", "This value will be added to each well", placement = "left", trigger = "hover", options = NULL),
+          tags$hr(),
+          HTML("<b>Enter Conditions:</b>"),
+          textInput('conditionsUI_Input', NULL, value=v$settings$conditionsUI_Input, placeholder = "Strain, Treatment, ..."),
+          bsTooltip("conditionsUI_Input", "Key words with which you can separate your growth curves", placement = "bottom", trigger = "hover", options = NULL),
+          actionButton("updateCond", "Apply Modifications", icon = icon("gears"),class = "btn-xl", title = "Update")
+          # column(12, align="center", p('(Cannot start with number, separated by coma)')),     
+        )
+      )
+    })
+    
   })
   
   observeEvent(input$ok, {
