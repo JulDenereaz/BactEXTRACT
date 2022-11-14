@@ -373,16 +373,16 @@ server <- function(input, output, session) {
   observeEvent(toListenNormMerge(), {
     req(input$norm)
     req(input$techAggr)
-    v <- names(v$rawdata_list[[1]])
+    v_names <- names(v$rawdata_list[[1]])
     if(input$techAggr != "None") {
-      v <- aggrTechV(v, input$techAggrN, input$techAggr=="Horizontal", multiF = tools::file_path_sans_ext(input$files$name))
+      v_names <- aggrTechV(v_names, input$techAggrN, input$techAggr=="Horizontal", multiF = tools::file_path_sans_ext(input$files$name))
     }else {
       output$techAggrUI <- NULL
     }
     if(input$norm == "Specific Well(s)") {
 
       output$normByWellsUI <- renderUI({
-        selectInput('normByWells', label="Wells to use for normalisation:", multiple = T, choices = v)
+        selectInput('normByWells', label="Wells to use for normalisation:", multiple = T, choices = v_names, selected=v$settings$normByWells)
       })
       
     }else{
@@ -393,6 +393,9 @@ server <- function(input, output, session) {
   
   ##### Update button Panel #####
   observeEvent(input$updateCond, {
+    if(is.null(v$rawdata_list)) {
+      showNotification('Cannot Process file(s)...', type='error')
+    }
     req(v$rawdata_list)
     if(input$conditionsUI_Input == "") {
       showNotification('You need at lest one condition', type='warning')
