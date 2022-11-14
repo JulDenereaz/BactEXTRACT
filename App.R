@@ -268,6 +268,7 @@ server <- function(input, output, session) {
       #     hot_table(highlightCol = T, highlightRow = T, allowRowEdit =F)
       # })
       if(length(rawdata_file_list) == 0) {
+        output$conditionsUI <- NULL
         return()
       }
       # return()
