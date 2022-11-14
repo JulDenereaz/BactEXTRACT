@@ -229,6 +229,7 @@ server <- function(input, output, session) {
       output$themeUI <- NULL
       output$plot <- NULL
       output$groups <- NULL
+      output$plot_auc_window <- NULL
     }
 
     progress <- shiny::Progress$new()
@@ -370,7 +371,7 @@ server <- function(input, output, session) {
 
   
   toListenNormMerge <- reactive({
-    list(input$techAggr, input$norm)
+    list(input$techAggr, input$norm, v$rawdata_list)
   })
   
   
@@ -456,7 +457,6 @@ server <- function(input, output, session) {
         hot_table(highlightCol = T, highlightRow = T, allowRowEdit =F)
     })
     
-    ##Change keepWell to T/F
     
     
     ##### UI graph options #####
@@ -773,14 +773,13 @@ server <- function(input, output, session) {
   
   ##### Parameters #####
   observeEvent(input$auc_window, {
-    
     output$plot_auc_window <- renderPlot({
       # df <- isolate(v$dataList_melted[[1]])
-      if(length(v$dataList[[1]]) == 0) {
+      if(length(v$dataList[[input$data_selector]]) == 0) {
         return()
       }
       
-      df <- melt(cbind(data.frame(time=v$timeScale), v$dataList[[1]]),id="time")
+      df <- melt(cbind(data.frame(time=v$timeScale), v$dataList[[input$data_selector]]),id="time")
       p <- ggplot(data=df, aes_string(x="time", y="value", group="variable")) +
         geom_line(size=1.2, alpha=0.7) +
         scale_x_continuous(expand=c(0,0), limits = input$range) +
