@@ -866,7 +866,7 @@ server <- function(input, output, session) {
           
           p <- ggarrange(pOD, p, ncol = 1, nrow = 2, align = "v", common.legend = T, legend = "right")
         }
-
+        v$p <- p
         return(p)
         
       }else {
