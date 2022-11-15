@@ -166,7 +166,6 @@ server <- function(input, output, session) {
   ##### Local Storage #####
   #Initialize reactives values
   v$loadedFromSave <- F
-  
   v$settings <- list()
   
   
@@ -181,19 +180,17 @@ server <- function(input, output, session) {
     showNotification('Deleted local Save', type='message')
   })
   
-  
   observeEvent(input$saveLocally, {
-    tmp <- updateSettings(
+    temp <- updateSettings(
       df=input, 
       customP=v$customP, 
       groupsDF=v$groupsDF[-which(names(v$groupsDF) %in% c("Wells", "Preview"))], 
       groupsDFLvl=lapply(v$groupsDF[-c(1,2,3)], levels)
     )
-    updateStore(session, name='settings', value=tmp)
+    updateStore(session, name='settings', value=temp)
     showNotification('Successfully saved locally', type='message')
-  })
+  })  
   
-
   
   
   observeEvent(input$loadGroupsStorage, {
@@ -687,8 +684,13 @@ server <- function(input, output, session) {
     output$download_settings <- downloadHandler(
       function() {paste0(input$title, "_settings.json")},
       function(file) {
-        
-        writeLines(jsonlite::toJSON(v$settings), file)
+        tmp <- updateSettings(
+          df=input, 
+          customP=v$customP, 
+          groupsDF=v$groupsDF[-which(names(v$groupsDF) %in% c("Wells", "Preview"))], 
+          groupsDFLvl=lapply(v$groupsDF[-c(1,2,3)], levels)
+        )
+        writeLines(jsonlite::toJSON(tmp, dataframe='columns' ), file)
       }
     )
     output$download_pdf <- downloadHandler(
@@ -886,6 +888,7 @@ server <- function(input, output, session) {
       v$p <- p
       return(p)
     }, width=reactive(input$width*72), height = reactive(input$height*72))
+    
   }
   
   

@@ -540,7 +540,7 @@ saveUpdate <- function(session, df, customP=NULL, groupsDF=NULL, groupsDFLvl=NUL
 
 updateSettings <- function(df, customP=NULL, groupsDF=NULL, groupsDFLvl=NULL) {
   settings <- list()
-  if(!is.null(customP)) {
+  if(!is.null(groupsDF)) {
     settings$customP <-  customP
     settings$groupsDF <-  groupsDF
     settings$groupsDFLvl <-  groupsDFLvl
