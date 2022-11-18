@@ -65,8 +65,8 @@ getFile <- function(fileData, lb, nfiles) {
       name <- rawdata[indexStart[i]-1,1]
       if(is.na(name) | name == "") {
         #if first subtable not named, it is named OD 
-        name <- ifelse(i == 1, "OD", i)
-        showNotification(paste0('The 1st table of ', fileData$name, ' was named "OD" by default.'), type="warning")
+        name <- ifelse(i == 1, "Sub-Table1", i)
+        showNotification(paste0('The 1st table of ', fileData$name, ' was named "Sub-Table1" by default.'), type="warning")
       }
       
       if(nrow(as.data.frame(subTableDF)) == 0) {
@@ -337,9 +337,15 @@ normalise <- function(df=NULL, method=NULL, baseOD=NULL, wells=NULL) {
 }
 
 lagNorm <- function(dl=NULL, threshold=0) {
+  if(detectIfOD(dl[[1]])) {
+    
+  }
+  
+  
   fw <- lapply(dl[[1]], function(well) {
     for (i in 1:length(well)) {
-      if(well[i] > threshold) {
+      
+      if(!is.na(well[i]) & well[i] > threshold) {
         return(i)
       }
     }
@@ -397,6 +403,7 @@ getUpLo <- function(df, log=F) {
   }
   return(df)
 }
+roundUp <- function(x) 10^ceiling(log10(x))
 
 
 getTrapezoidalAUC <- function(timeCol, plate, range) {

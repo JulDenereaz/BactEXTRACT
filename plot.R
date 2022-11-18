@@ -1,11 +1,11 @@
 
-makePlot <- function(dfRaw, input, customP, ylabel="", od = T) {
+makePlot <- function(dfRaw, input, customP, ylabel="", od=F, yRange) {
   # getting upper, lower bound from SE, and calculate log10 if necessary
   if(!is.numeric(dfRaw$value)) {
     return()
   }
   
-  df <- getUpLo(dfRaw, input$logScale && od)
+  df <- getUpLo(dfRaw, od && input$logScale)
   
   if(!is.null(input$referenceCurve) && input$referenceCurve != "None") {
     df <- addReferenceCurve(input$referenceCurve, input$fw, df)
@@ -65,55 +65,42 @@ makePlot <- function(dfRaw, input, customP, ylabel="", od = T) {
 
   p <- p + getTheme(input$theme, input$size)
   
-  if(od) {
-    if(input$logScale) {
-      tmp = as.numeric(input$yAxisRange)
-      if(!tmp[1]) {
-        return(NULL)
-      }
-      lims <- c(log10(tmp[1]), log10(tmp[2]))
-      params <- list(limits=lims, expand=c(0,0), breaks=seq(log10(tmp[1]), log10(tmp[2]), 1), labels=10^seq(log10(tmp[1]), log10(tmp[2]), 1), minor_breaks = log10(exp(seq(log(tmp[1]), log(tmp[2]), length.out = abs(lims[1]-lims[2])+1))*5))
+  if(od && input$logScale) {
+    tmp = as.numeric(yRange)
+    if(!tmp[1]) {
+      return(NULL)
+    }
+    lims <- c(log10(tmp[1]), log10(tmp[2]))
+    params <- list(limits=lims, expand=c(0,0), breaks=seq(log10(tmp[1]), log10(tmp[2]), 1), labels=10^seq(log10(tmp[1]), log10(tmp[2]), 1), minor_breaks = log10(exp(seq(log(tmp[1]), log(tmp[2]), length.out = abs(lims[1]-lims[2])+1))*5))
+    
+    if (input$fw != "None" & !is.null(input$nRowsFacets)) {
+      a <- annotation_logticks( sides = "l", size = input$size/25, colour="black", outside=T, mid=unit(0.3, "cm"), long=unit(0.4, "cm"), short=unit(0.2, "cm"))
       
-      if (input$fw != "None" & !is.null(input$nRowsFacets)) {
-        a <- annotation_logticks( sides = "l", size = input$size/25, colour="black", outside=T, mid=unit(0.3, "cm"), long=unit(0.4, "cm"), short=unit(0.2, "cm"))
-        
-        a$data <- getDFlogticks(input$fw, df, input$nRowsFacets, a$data, input$referenceCurve)
-        p <- p + a
-      }else {
-        p <- p + annotation_logticks( sides = "l", size = input$size/25, colour="black", outside=T, mid=unit(0.3, "cm"), long=unit(0.4, "cm"), short=unit(0.2, "cm"))
-          
-      }
-
+      a$data <- getDFlogticks(input$fw, df, input$nRowsFacets, a$data, input$referenceCurve)
+      p <- p + a
     }else {
-      tmp = round(as.numeric(input$yAxisRange), 1)
-      lims <- c(tmp[1], tmp[2])
-      params <- list(limits=lims, expand=c(0, 0))
-      p <- p + theme(axis.ticks = element_line(size=input$size/25), axis.ticks.length = unit(0.3, "cm"))
+      p <- p + annotation_logticks( sides = "l", size = input$size/25, colour="black", outside=T, mid=unit(0.3, "cm"), long=unit(0.4, "cm"), short=unit(0.2, "cm"))
+        
     }
 
-    p <- p + do.call(scale_y_continuous,params)
-
-    p <-  p +
-      scale_x_continuous(expand=c(0,0), limits = input$range) +
-      theme(axis.text.y.left = element_text(margin=margin(t=0, r=10, b=0, l=0))) +
-      coord_cartesian(clip = "off") +
-      labs(
-        linetype=input$linetype,
-        shape=input$shape,
-        x = ifelse(input$x_axis_title =="", "Time [h]", input$x_axis_title),
-        y = ifelse(input$y_axis_title =="", "Cell Density [OD 595nm]", input$y_axis_title),)
-    
   }else {
-    p <- p + 
-      scale_y_continuous(limits=c(0, max(df$value+df$SE, na.rm=T)*1.1), expand=c(0, 0)) +
-      theme(axis.ticks = element_line(size=input$size/25), axis.ticks.length = unit(0.3, "cm")) +
-      scale_x_continuous(expand=c(0,0), limits = input$range) +
-      theme(axis.text.y.left = element_text(margin=margin(t=0, r=10, b=0, l=0))) +
-      coord_cartesian(clip = "off") +
-      labs(
-        x = ifelse(input$x_axis_title =="", "Time [h]", input$x_axis_title),
-        y = ifelse(input$y_axis_title =="", ylabel, input$y_axis_title)) #to modify into given parameter from name of subtable (RLU/GFP...)
+    tmp = round(as.numeric(yRange), 1)
+    lims <- c(tmp[1], tmp[2])
+    params <- list(limits=lims, expand=c(0, 0))
+    p <- p + theme(axis.ticks = element_line(size=input$size/25), axis.ticks.length = unit(0.3, "cm"))
   }
+
+  p <-  p +
+    do.call(scale_y_continuous,params) +
+    scale_x_continuous(expand=c(0,0), limits = input$range) +
+    theme(axis.text.y.left = element_text(margin=margin(t=0, r=10, b=0, l=0))) +
+    coord_cartesian(clip = "off") +
+    labs(
+      linetype=input$linetype,
+      shape=input$shape,
+      x = ifelse(input$x_axis_title =="", "Time [h]", input$x_axis_title),
+      y = ifelse(input$y_axis_title =="", ylabel, input$y_axis_title),)
+  
   
   if(!is.null(input$customThemeUI) && nchar(input$customThemeUI) > 0) {
     str = paste0("list(", input$customThemeUI, ")")

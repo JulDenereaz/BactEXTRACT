@@ -535,7 +535,7 @@ server <- function(input, output, session) {
             textInput('y_axis_title', "Y axis Title:", value = v$settings$y_axis_title),
             selectInput('params_y_scale', 'Y axis selector:', choices=v$conditions, selected=v$settings$params_y_scale, width='100%'),
           ),
-          checkboxInput('logScale', 'Log10 Scale', value = orNull(v$settings$logScale, T)),
+          checkboxInput('logScale', 'Log10 Scale (for OD only)', value = orNull(v$settings$logScale, T)),
           uiOutput("logScaleUI"),
           tags$hr(),
           splitLayout(
@@ -754,16 +754,18 @@ server <- function(input, output, session) {
     
     ##### Log Scale UI #####
     observeEvent(input$logScale, {
+      # mvalue <- roundUp(max(v$dataList_melted[[input$data_selector]]$value, na.rm=T)*1.1)
+      # n <- 5+ceiling(log10(mvalue))
       if(input$logScale) {
         output$logScaleUI <- renderUI({
           list(
-            sliderTextInput('yAxisRange', 'Y axis range:', choices = 10^c(1:6)/100000, selected =c(0.001, 1),  grid=T)
+            sliderTextInput('yAxisRange', 'Y axis range (for OD only):', choices = 10^c(1:6)/100000, selected =c(0.001, 1),  grid=T)
           )
         })
       }else {
         output$logScaleUI <- renderUI({
           list(
-            sliderInput('yAxisRange', 'Y axis range:', min=0, step=0.1, max=ceiling(max(v$dataList_melted[[input$data_selector]]$value, na.rm=T)), value=c(0, max(v$dataList_melted[[input$data_selector]]$value, na.rm=T)*1.3))
+            sliderInput('yAxisRange', 'Y axis range (for OD only):', min=0, step=0.1, max=2, value=c(0, 1))
           )
         })
       }
@@ -852,20 +854,33 @@ server <- function(input, output, session) {
       if(input$type_plot_selector == "Growth Plot") {
         df <- v$dataList_melted[[input$data_selector]]
         
-        text <- ""
+        text <- ifelse(v$isOD[[input$data_selector]], "Cell Density [OD 595nm]", input$data_selector)
+        
         
         #Normalization by other subtable
         if(!is.null(input$secPlotMethod) && input$secPlotMethod != "None") {
           df$value <- isolate(as.numeric(df$value)/as.numeric(v$dataList_melted[[input$secPlotMethod]]$value))
           text <- paste(input$data_selector, "/", input$secPlotMethod)
         }
+        yr <- c(0, max(df$value)*1.1)
+        if(detectIfOD(df$value)) {
+          yr <- input$yAxisRange
+        }
         
-        p <- makePlot(df, input, isolate(v$customP), ylabel=text, od=v$isOD[[input$data_selector]])
+        p <- makePlot(df, input, customP=isolate(v$customP), ylabel=text, yRange=yr, od=detectIfOD(df$value))
         
         #If displaying two subtables
         if(!is.null(input$secPlotDisplay) && input$secPlotDisplay != "None") {
-          pOD <- makePlot(v$dataList_melted[[input$secPlotDisplay]], input, isolate(v$customP), od=v$isOD[[input$secPlotDisplay]])
-          
+          df2 <- v$dataList_melted[[input$secPlotDisplay]]
+          yr <- c(0, max(df2$value)*1.1)
+          if(detectIfOD(df2$value)) {
+            yr <- input$yAxisRange
+          }
+          pOD <- makePlot(df2, input, yRange=yr, od=T, customP=isolate(v$customP), ylabel="Cell Density [OD 595nm]")
+          pOD <- pOD + 
+            theme(axis.title.x=element_blank(),
+                  axis.text.x=element_blank(),
+                  axis.ticks.x=element_blank())
           p <- ggarrange(pOD, p, ncol = 1, nrow = 2, align = "v", common.legend = T, legend = "right")
         }
         v$p <- p
@@ -888,10 +903,7 @@ server <- function(input, output, session) {
       v$p <- p
       return(p)
     }, width=reactive(input$width*72), height = reactive(input$height*72))
-    
   }
-  
-  
 }
 
 
