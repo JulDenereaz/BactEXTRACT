@@ -169,13 +169,17 @@ aggrTech <- function(dataList, N, horiz=T, multiF=F) {
   dataList_aggre <- lapply(dataList, function(df) {
     
     #horiz => A1, A2, A3
+    nam <- colnames(df)
+    
+    #index order for vertical merging:
+    x <- match(nam[order(as.numeric(gsub("\\D", "", nam)))], nam)
+    #iterate through each N group of columns
     newDF <- do.call(cbind, lapply(seq(1, ncol(df), by=N), function(colN) {
       subs <- colN:(colN+N-1)
       if(!horiz) {
-        nam <- colnames(df)
-        x <- match(nam[order(as.numeric(gsub("\\D", "", nam)))], nam)
         subs <- x[subs]
       }
+      
       temp <- data.frame(rowMeans(df[subs]))
       nam <- colnames(df)[subs]
       
@@ -192,6 +196,9 @@ aggrTech <- function(dataList, N, horiz=T, multiF=F) {
       
       return(temp)
     }))
+    if(!horiz) {
+      newDF <- newDF[ , order(names(newDF))]
+    }
     
     return(newDF)
   })
