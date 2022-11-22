@@ -532,6 +532,7 @@ saveUpdate <- function(session, df, customP=NULL, groupsDF=NULL, groupsDFLvl=NUL
   updateStore(session, name = "norm", value = df$norm)
   updateStore(session, name = "norm_baseOD", value = df$norm_baseOD)
   updateStore(session, name = "techAggr", value = df$techAggr)
+  updateStore(session, name = "techAggrN", value = df$techAggrN)
   updateStore(session, name = "x_axis_title", value = df$x_axis_title)
   updateStore(session, name = "y_axis_title", value = df$y_axis_title)
   updateStore(session, name = "customThemeUI", value = df$customThemeUI)
@@ -543,6 +544,7 @@ saveUpdate <- function(session, df, customP=NULL, groupsDF=NULL, groupsDFLvl=NUL
   updateStore(session, name = "params_x_scale", value = df$params_x_scale)
   updateStore(session, name = "params_y_scale", value = df$params_y_scale)
   updateStore(session, name = "range", value = df$range)
+  updateStore(session, name = "logScale", value = df$logScale)
   updateStore(session, name = "data_selector", value = df$data_selector)
   updateStore(session, name = "param_selector", value = df$param_selector)
   updateStore(session, name = "secPlotMethod", value = df$secPlotMethod)
@@ -579,6 +581,7 @@ updateSettings <- function(df, customP=NULL, groupsDF=NULL, groupsDFLvl=NULL) {
   settings$norm <-  df$norm
   settings$norm_baseOD <-  df$norm_baseOD
   settings$techAggr <-  df$techAggr
+  settings$techAggrN <-  df$techAggrN
   settings$x_axis_title <-  df$x_axis_title
   settings$y_axis_title <-  df$y_axis_title
   settings$customThemeUI <-  df$customThemeUI
@@ -590,6 +593,7 @@ updateSettings <- function(df, customP=NULL, groupsDF=NULL, groupsDFLvl=NULL) {
   settings$params_x_scale <-  df$params_x_scale
   settings$params_y_scale <-  df$params_y_scale
   settings$range <-  df$range
+  settings$logScale <-  df$logScale
   settings$data_selector <-  df$data_selector
   settings$param_selector <-  df$param_selector
   settings$secPlotMethod <-  df$secPlotMethod

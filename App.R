@@ -299,7 +299,7 @@ server <- function(input, output, session) {
         list(
           splitLayout(
             selectInput('techAggr', 'Tech. Repl. Merge:', choices=c("None", "Horizontal", "Vertical"), selected = v$settings$techAggr),
-            numericInput('techAggrN', 'By:', value=3, min=2)
+            numericInput('techAggrN', 'By:', value=orNull(v$settings$techAggrN, 3), min=2)
           ),
           bsTooltip("techAggr", "Average adjacent wells together (A1-A2-A3 or A1-B1-C1)", placement = "left", trigger = "hover", options = NULL),
           div(
