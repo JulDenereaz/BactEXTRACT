@@ -447,7 +447,8 @@ getMaxVal <- function(timeCol, plate, range) {
 
 getMu <- function(N, N0, t, t0) {
   #µ = ( (log10 N - log10 N0) 2.303) / (t - t0)
-  if(N<0 || N0<0 || is.na(N)) {
+  
+  if(N<0 || N0<0 || is.na(N) || is.na(N0)) {
     return(0)
   }
   return(((log10(N) - log10(N0))* 2.303) / (t - t0))
@@ -467,6 +468,7 @@ getMaxGr <- function(timeCol, plate, range) {
         maxgr <- mu
       }
     }
+    print(123)
     return(maxgr)
   })
   return(as.numeric(max))
