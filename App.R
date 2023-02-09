@@ -278,7 +278,6 @@ server <- function(input, output, session) {
     v$timeScale <- timeCols[[which.max(lengths(timeCols))]]
     v$subTableNames <- names(rawdata_file_list[[1]])[-1] #Not looping through the time vector
     v$rawdata_list <- mergeSubTables(rawdata_file_list, v$subTableNames, names(rawdata_file_list), length(v$timeScale))
-    
     v$isOD <- lapply(v$rawdata_list, function(table) {
       return(detectIfOD(table))
     })
@@ -437,7 +436,6 @@ server <- function(input, output, session) {
     # horizontal normalisation
     v$dataList <- lagNorm(isolate(v$dataList), input$norm_lagPhase)
     v$toCalculateParams <- T
-    
     #SapLine to preview the growth curve of each well
     v$groups$Preview <- apply(v$dataList[[1]], 2, function(x) jsonlite::toJSON(list(values=as.vector(replace(x, is.na(x), 0)), options=list(type="line", spotRadius=0, chartRangeMin=0, chartRangeMax=1))))
     output$groups <- renderRHandsontable({
@@ -483,7 +481,7 @@ server <- function(input, output, session) {
           tags$hr(),
           splitLayout(
             selectInput('type_plot_selector', 'Plot type:', choices =  c("Growth Plot", "Bar Plot", "Checker Plot", "Logistic Curves"), selected = v$settings$type_plot_selector, width='100%'),
-            selectInput('data_selector', 'Data to display:', choices = names(v$dataList), selected=v$settings$data_selector, width='100%'),
+            selectInput('data_selector', 'Subtable to display:', choices = names(v$dataList), selected=v$settings$data_selector, width='100%'),
             
           ),
           uiOutput("sec_plot_type_UI"),

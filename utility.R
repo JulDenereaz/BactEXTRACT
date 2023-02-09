@@ -18,8 +18,9 @@ getFile <- function(fileData, lb, nfiles) {
     biotek <- F
     if(any(grepl("Synergy", rawdata))) {
       #First column empty in synergy software => might wanna double check that
-      indexStart <- which(rawdata[-1]=='Time')
+      indexStart <- which(rawdata[-1]=='Time')+1
       if(any(which(rawdata == "Results"))) {
+        #Removing the results part, after the last subtable
         indexStop <- which(rawdata == "Results")
         rawdata <- rawdata[1:indexStop,]
       }
@@ -30,12 +31,10 @@ getFile <- function(fileData, lb, nfiles) {
     if(length(indexStart) == 0) {
       stop(paste0("Could not find the start of the data table in: ", fileData$name))
     }
-    for (i in 1:length(indexStart)) {
-      if(i == length(indexStart)) {
-        subTableDF <- rawdata[indexStart[i]:nrow(rawdata),]
-      }else {
-        subTableDF <- rawdata[indexStart[i]:indexStart[i+1]-1,]
-      }
+    indexStart <- c(indexStart, nrow(rawdata))
+    for (i in 1:(length(indexStart)-1)) {
+      subTableDF <- rawdata[indexStart[i]:indexStart[i+1]-1,]
+      
       #If Time is below Cycle, that means each row is a well, hence we need to translate the table to make each column = one well
       if(!biotek & grepl("Time", rawdata[indexStart[i]+1,1])) {
         subTableDF <- as.data.frame(t(subTableDF))
@@ -59,14 +58,15 @@ getFile <- function(fileData, lb, nfiles) {
       subTableDF <- subTableDF[1:length(rawTableList$time),]
       
       subTableDF <- subTableDF[, -grep("temp|cycle|time|t..", tolower(colnames(subTableDF)))]
+      name <- rawdata[indexStart[i]-1,1]
       if(biotek) {
+        name <- rawdata[indexStart[i]-3, 1]
         rawTableList$time <- rawTableList$time*86400
       }
-      name <- rawdata[indexStart[i]-1,1]
       if(is.na(name) | name == "") {
-        #if first subtable not named, it is named OD 
-        name <- ifelse(i == 1, "Sub-Table1", i)
-        showNotification(paste0('The 1st table of ', fileData$name, ' was named "Sub-Table1" by default.'), type="warning")
+        #if subtable not named, it is named OD 
+        name <- paste0("Sub-Table", i)
+        showNotification(paste0('The sub-table N°', i, ' of ', fileData$name, ' was named "Sub-Table"', i,' by default.'), type="warning")
       }
       
       if(nrow(as.data.frame(subTableDF)) == 0) {
@@ -468,7 +468,6 @@ getMaxGr <- function(timeCol, plate, range) {
         maxgr <- mu
       }
     }
-    print(123)
     return(maxgr)
   })
   return(as.numeric(max))
