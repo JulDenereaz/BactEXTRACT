@@ -18,7 +18,7 @@ getFile <- function(fileData, lb, nfiles) {
     biotek <- F
     if(any(grepl("Synergy", rawdata))) {
       #First column empty in synergy software => might wanna double check that
-      indexStart <- which(rawdata[-1]=='Time')+1
+      indexStart <- which(rawdata[-1]=='Time')
       if(any(which(rawdata == "Results"))) {
         #Removing the results part, after the last subtable
         indexStop <- which(rawdata == "Results")
@@ -33,7 +33,7 @@ getFile <- function(fileData, lb, nfiles) {
     }
     indexStart <- c(indexStart, nrow(rawdata))
     for (i in 1:(length(indexStart)-1)) {
-      subTableDF <- rawdata[indexStart[i]:indexStart[i+1]-1,]
+      subTableDF <- rawdata[indexStart[i]:indexStart[i+1],]
       
       #If Time is below Cycle, that means each row is a well, hence we need to translate the table to make each column = one well
       if(!biotek & grepl("Time", rawdata[indexStart[i]+1,1])) {
@@ -60,7 +60,7 @@ getFile <- function(fileData, lb, nfiles) {
       subTableDF <- subTableDF[, -grep("temp|cycle|time|t..", tolower(colnames(subTableDF)))]
       name <- rawdata[indexStart[i]-1,1]
       if(biotek) {
-        name <- rawdata[indexStart[i]-3, 1]
+        name <- rawdata[indexStart[i]-2, 1]
         rawTableList$time <- rawTableList$time*86400
       }
       if(is.na(name) | name == "") {
@@ -69,12 +69,16 @@ getFile <- function(fileData, lb, nfiles) {
         showNotification(paste0('The sub-table N°', i, ' of ', fileData$name, ' was named "Sub-Table"', i,' by default.'), type="warning")
       }
       
-      if(nrow(as.data.frame(subTableDF)) == 0) {
+      if(nrow(as.data.frame(subTableDF)) == 0 || length(subTableDF) == 0) {
         stop(paste0("N. rows of ", name, "  dataframe is 0 in ", fileData$name))
       }
+      
+      
       #Append to the list
       rawTableList[[name]] <- as.data.frame(subTableDF)
       lb$inc((1/(nfiles))/length(indexStart), detail = "")
+      
+      
     }
     
   }
@@ -152,7 +156,6 @@ updateGroup <- function(groups, conditions, wells) {
   if(length(x) >= 1) {
     groups <- groups[-x]
   }
-  
   #Only add new columns if a non-existing condition has been entered
   groups[,setdiff(conditions, currentConds)] <- "NA"
   return(groups)
@@ -501,7 +504,6 @@ plot_exception <-function(
 getLogisticParameters <- function(timeCol, plate, range) {
   tmp <- cbind(data.frame(time=timeCol), plate)
   tmp <- tmp[which(tmp$time >= range[1] & tmp$time <= range[2]),]
-  
   tmp <- suppressWarnings(SummarizeGrowthByPlate(tmp))
   return(tmp)
 }
@@ -563,7 +565,13 @@ updateSettings <- function(df, customP=NULL, groupsDF=NULL, groupsDFLvl=NULL) {
     settings$groupsDFLvl <-  groupsDFLvl
   }else {
     settings$customP <-  df$customP
-    settings$groupsDF <-  df$groupsDF
+    
+    #If a column is entirely NA, fromJSON automatically assign the column as logical. Changing to character:
+    settings$groupsDF <- sapply(df$groupsDF, function(col) {
+      if(is.logical(col)) {
+        return("NA")
+      }
+    })
     settings$groupsDFLvl <-  df$groupsDFLvl
   }
   settings$color <-  df$color
@@ -612,7 +620,8 @@ updateSettings <- function(df, customP=NULL, groupsDF=NULL, groupsDFLvl=NULL) {
 removePattern <- function(df, x, replacem) {
   df <- lapply(names(df), function(colna) {
     if(any(grepl("  ", df[[colna]]))) {
-      showNotification(paste0('Some double spaced were found and replaced in column ', colna), type="warning")
+      showNotification(paste0('Some double spaced were found and replaced in column ', colna, ': '), type="warning")
+      message(df[[colna]][grepl("  ", df[[colna]])])
       return(as.factor(gsub("  ", " ", df[[colna]])))
     }
     return(df[[colna]])

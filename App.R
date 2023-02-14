@@ -196,6 +196,7 @@ server <- function(input, output, session) {
   observeEvent(input$loadGroupsStorage, {
     req(v$groups)
     repl <- as.data.frame(v$settings$groupsDF)
+    
     if(nrow(repl) != nrow(v$groups)) {
       showNotification('Number of rows differs from save and current file', type='error')
       return()
@@ -365,6 +366,7 @@ server <- function(input, output, session) {
     })
   })
 
+
   
   toListenNormMerge <- reactive({
     list(input$techAggr, input$norm, v$rawdata_list)
@@ -405,7 +407,6 @@ server <- function(input, output, session) {
     v$conditions <- formartConditions(input$conditionsUI_Input)
     
     
-    
     #Aggregating technical replicate by mean
     if(input$techAggr != "None") {
       aggdata_list <- aggrTech(v$rawdata_list, input$techAggrN, input$techAggr =="Horizontal", multiF = tools::file_path_sans_ext(input$files$name))
@@ -421,7 +422,6 @@ server <- function(input, output, session) {
         v$groups[colnames(data.frame(hot_to_r(input$groups)))] <- data.frame(hot_to_r(input$groups))
       }
     }
-    
     v$groups <- updateGroup(isolate(v$groups), v$conditions, colnames(aggdata_list[[1]]))
 
     
@@ -453,7 +453,6 @@ server <- function(input, output, session) {
     })
     
     
-    
     ##### UI graph options #####
     output$graph_optionsUI <- renderUI({
       fluidPage(
@@ -480,22 +479,24 @@ server <- function(input, output, session) {
           ),
           tags$hr(),
           splitLayout(
-            selectInput('type_plot_selector', 'Plot type:', choices =  c("Growth Plot", "Bar Plot", "Checker Plot", "Logistic Curves"), selected = v$settings$type_plot_selector, width='100%'),
+            selectInput('type_plot_selector', 'Plot type:', choices =  c("Growth Plot", "Bar Plot", "Checker Plot"), selected = v$settings$type_plot_selector, width='100%'),
             selectInput('data_selector', 'Subtable to display:', choices = names(v$dataList), selected=v$settings$data_selector, width='100%'),
             
           ),
-          uiOutput("sec_plot_type_UI"),
+          splitLayout(
+            uiOutput("sec_plot_type_UI"),
+            actionButton("previewLogisticFit", "Preview Logistic fit")
+          ),
           selectInput('param_selector', 'Parameter to display:', choices=c(names(v$params)), selected=v$settings$param_selector, width='100%'),
           splitLayout(
             cellWidths = c("10%", "90%"),
             div(),
-            sliderInput('auc_window', 'Window range for growth parameters [h]:', min=0, step=0.5, max=ceiling(max(v$timeScale)), value=c(0, ifelse(ceiling(max(v$timeScale)) > 6, 6, floor(max(v$timeScale)))))
+            sliderInput('auc_window', 'Window range for growth parameters [h]:', min=0, step=0.5, max=ceiling(max(v$timeScale)), value=c(0, ifelse(ceiling(max(v$timeScale)) > 6, 6, ceiling(max(v$timeScale)))))
           ),
           plotOutput('plot_auc_window')
         )
       )
     })
-    
     output$themeUI <- renderUI({
       fluidPage(
         list(
@@ -527,7 +528,7 @@ server <- function(input, output, session) {
             textInput('x_axis_title', "X axis Title:", value = v$settings$x_axis_title),
             selectInput('params_x_scale', 'X axis selector:', choices=v$conditions, selected=v$settings$params_x_scale, width='100%'),
           ),
-          sliderInput('range', 'X axis range:', min=0, step=0.5, max=ceiling(max(v$timeScale)), value=orNull(v$settings$range, c(0, ceiling(max(v$timeScale))))),
+          sliderInput('range', 'X axis range:', min=0, max=ceiling(max(v$timeScale)), value=orNull(v$settings$range, c(0, ceiling(max(v$timeScale))))),
           tags$hr(),
           splitLayout(
             textInput('y_axis_title', "Y axis Title:", value = v$settings$y_axis_title),
@@ -606,14 +607,12 @@ server <- function(input, output, session) {
       v$groupsDF[-c(1,2,3)] <- lapply(v$groupsDF[-c(1,2,3)], factor)
     }
     v$loadedFromSave <- F
-  
     v$groupsDF[-c(1,2,3)] <- removePattern(v$groupsDF[-c(1,2,3)], "  ", " ")
     
     
     v$dataList_melted <- dataMelter(v$dataList, v$groupsDF, v$timeScale)
     
     v$groupDF_subset <- v$groupsDF[v$groupsDF$KeepWell=="Yes", -which(names(v$groupsDF) =="Preview")]
-    
     
     if(v$toCalculateParams) {
       calculateParams()
@@ -626,7 +625,7 @@ server <- function(input, output, session) {
       }
     }
     v$oldWells <- v$groupsDF$KeepWell
-    
+
     
     
     if(is.null(v$dataList_melted)) {
@@ -823,7 +822,62 @@ server <- function(input, output, session) {
       data$max_val <- getMaxVal(v$timeScale, subTable, input$auc_window)
       return(data)
     })
-  })  
+  })
+  
+  observeEvent(input$previewLogisticFit, {
+    req(v$params_list)
+    
+    df_params <- cbind(
+      v$groupDF_subset,
+      v$params_list[[input$data_selector]]
+    )
+    
+    data_raw <- cbind(data.frame(time=v$timeScale), v$dataList[[input$data_selector]])
+    dataOD <- data_raw[which(data_raw$time >= input$auc_window[1] & data_raw$time <= input$auc_window[2]),]
+    
+    showModal(modalDialog(
+      title='Logistic Fit Preview',
+      splitLayout(
+        selectizeInput('fitPreviewSelector', label='Select Wells:', multiple=T, choices=df_params$Wells),
+        actionButton('fitPreviewAll', label='Select All curves')
+      ),
+      renderPlot({
+        req(input$fitPreviewSelector)
+        ps <- do.call(grid.arrange, lapply(input$fitPreviewSelector, function(well) {
+          cp <- "green"
+          if(df_params[df_params$Wells==well, "note"] != "") {
+            cp <- "red"
+          }
+          k <- df_params[df_params$Wells==well, "k"]
+          N0 <- df_params[df_params$Wells==well, "n0"]
+          r <- df_params[df_params$Wells==well, "r"]
+          p <- ggplot(dataOD, aes_string(x="time", y=sym(well))) +
+            geom_line(size=1.2) +
+            stat_function(fun = function(t) k / (1 + ((k - N0) / N0) * exp(-r * t)), col=cp) +
+            ylim(0, 1.15*max(dataOD[-1], na.rm=T)) +
+            scale_x_continuous(expand=c(0,0), limits = input$auc_window) +
+            theme_classic() +
+            annotate(geom = 'text', label = paste(" ", well), x = -Inf, y = Inf, hjust = 0, vjust = 1, col=cp) +
+            theme(axis.title=element_blank(),
+                  axis.text=element_blank(),
+                  axis.ticks=element_blank(),
+                  panel.grid=element_blank())
+
+          return(p)
+        }))
+        return(ps)
+      }),
+      easyClose = T,
+      footer = tagList(
+        modalButton('Exit')
+      ),
+      size="l"
+      
+    ))
+  })
+  observeEvent(input$fitPreviewAll, {
+    updateSelectizeInput(inputId = 'fitPreviewSelector', selected=v$groupDF_subset$Wells)
+  })
   
   
   ##### lvl Order Sorter #####
