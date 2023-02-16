@@ -196,7 +196,6 @@ server <- function(input, output, session) {
   observeEvent(input$loadGroupsStorage, {
     req(v$groups)
     repl <- as.data.frame(v$settings$groupsDF)
-    
     if(nrow(repl) != nrow(v$groups)) {
       showNotification('Number of rows differs from save and current file', type='error')
       return()
@@ -824,60 +823,80 @@ server <- function(input, output, session) {
     })
   })
   
+  ##### Logistic Preview #####
+  
   observeEvent(input$previewLogisticFit, {
     req(v$params_list)
-    
+    output$previewFitPlot <- NULL
+    showModal(modalDialog(
+      title='Logistic Fit Preview',
+      splitLayout(
+        selectizeInput('fitPreviewSelector', label='Select Wells:', multiple=T, selected="A2", choices=v$groupDF_subset$Wells),
+        actionButton('fitPreviewAll', label='Select All curves'),
+        actionButton('fitPreviewBad', label='Select Badly Fitted curves')
+      ),
+      actionButton('fitPreviewUpdatePlot', label='Update Plot', icon = icon('arrows-rotate')),
+      plotOutput('previewFitPlot'),
+      easyClose = T,
+      footer = tagList(
+        downloadButton("download_png_fit", label = "Plot (PNG)"),
+        modalButton('Exit')
+      ),
+      size="l"
+    ))
+  })
+  output$download_png_fit <- downloadHandler(
+    function(){paste0(input$title,'_fittedPreview.png')},
+    function(file){
+      ggsave(file,plot=v$fited_preview_plot,width=7, height=5, units="in")
+    }
+  )
+  observeEvent(input$fitPreviewAll, {
+    updateSelectizeInput(inputId = 'fitPreviewSelector', selected=v$groupDF_subset$Wells)
+  })
+  observeEvent(input$fitPreviewBad, {
+    updateSelectizeInput(inputId = 'fitPreviewSelector', selected=v$groupDF_subset$Wells[v$params_list[[input$data_selector]]$note != ""])
+  })  
+  observeEvent(input$fitPreviewUpdatePlot, {
     df_params <- cbind(
       v$groupDF_subset,
       v$params_list[[input$data_selector]]
     )
-    
     data_raw <- cbind(data.frame(time=v$timeScale), v$dataList[[input$data_selector]])
     dataOD <- data_raw[which(data_raw$time >= input$auc_window[1] & data_raw$time <= input$auc_window[2]),]
-    
-    showModal(modalDialog(
-      title='Logistic Fit Preview',
-      splitLayout(
-        selectizeInput('fitPreviewSelector', label='Select Wells:', multiple=T, choices=df_params$Wells),
-        actionButton('fitPreviewAll', label='Select All curves')
-      ),
-      renderPlot({
-        req(input$fitPreviewSelector)
-        ps <- do.call(grid.arrange, lapply(input$fitPreviewSelector, function(well) {
-          cp <- "green"
-          if(df_params[df_params$Wells==well, "note"] != "") {
-            cp <- "red"
-          }
-          k <- df_params[df_params$Wells==well, "k"]
-          N0 <- df_params[df_params$Wells==well, "n0"]
-          r <- df_params[df_params$Wells==well, "r"]
-          p <- ggplot(dataOD, aes_string(x="time", y=sym(well))) +
-            geom_line(size=1.2) +
-            stat_function(fun = function(t) k / (1 + ((k - N0) / N0) * exp(-r * t)), col=cp) +
-            ylim(0, 1.15*max(dataOD[-1], na.rm=T)) +
-            scale_x_continuous(expand=c(0,0), limits = input$auc_window) +
-            theme_classic() +
-            annotate(geom = 'text', label = paste(" ", well), x = -Inf, y = Inf, hjust = 0, vjust = 1, col=cp) +
-            theme(axis.title=element_blank(),
-                  axis.text=element_blank(),
-                  axis.ticks=element_blank(),
-                  panel.grid=element_blank())
+    output$previewFitPlot <- renderPlot({
+      wellList <- isolate(input$fitPreviewSelector)
+      req(wellList)
+      if(length(wellList) > 49) {
+        wellList <- wellList[1:49]
+      }
+      ps <- do.call(grid.arrange, lapply(wellList, function(well) {
+        cp <- "#66a182"
+        if(df_params[df_params$Wells==well, "note"] != "") {
+          cp <- "#d1495b"
+        }
+        k <- df_params[df_params$Wells==well, "k"]
+        N0 <- df_params[df_params$Wells==well, "n0"]
+        r <- df_params[df_params$Wells==well, "r"]
+        p <- ggplot(dataOD, aes_string(x="time", y=sym(well))) +
+          geom_line(size=1.2) +
+          stat_function(fun = function(t) k / (1 + ((k - N0) / N0) * exp(-r * t)), col=cp, size=1.2) +
+          ylim(0, 1.15*max(dataOD[-1], na.rm=T)) +
+          scale_x_continuous(expand=c(0,0), limits = input$auc_window) +
+          theme_classic() +
+          annotate(geom = 'text', label = paste(" ", well), x = -Inf, y = Inf, hjust = 0, vjust = 1, col=cp, size=rescale(length(wellList), c(3, 10), c(48, 1))) +
+          theme(axis.title=element_blank(),
+                axis.text=element_blank(),
+                axis.ticks=element_blank(),
+                panel.grid=element_blank())
+        
+        return(p)
+      }))
+      v$fited_preview_plot <- ps
+      return(ps)
+    })
+  })
 
-          return(p)
-        }))
-        return(ps)
-      }),
-      easyClose = T,
-      footer = tagList(
-        modalButton('Exit')
-      ),
-      size="l"
-      
-    ))
-  })
-  observeEvent(input$fitPreviewAll, {
-    updateSelectizeInput(inputId = 'fitPreviewSelector', selected=v$groupDF_subset$Wells)
-  })
   
   
   ##### lvl Order Sorter #####
