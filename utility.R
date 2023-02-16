@@ -300,6 +300,7 @@ getInteractions <- function(cond) {
 formartConditions <- function(input) {
   cond <- str_trim(unlist(strsplit(input,",")))
   cond <- gsub("^[0-9]+", '', cond)
+  cond <- gsub("-", "_", cond)
   cond <- gsub("KeepWell|SE|time|value|Wells|Preview", '', cond)
   cond <- gsub(" ", "_", cond)
   cond <- unique(cond[cond != ""])
@@ -502,9 +503,15 @@ plot_exception <-function(
 
 
 getLogisticParameters <- function(timeCol, plate, range) {
+  
+  samplesNames <- colnames(plate)
+  #Removing "plate" from colnames, otherwise the column will be ignored in SummarizeGrowthByPlate()
+  colnames(plate) <- gsub("plate", "", tolower(colnames(plate)))
   tmp <- cbind(data.frame(time=timeCol), plate)
   tmp <- tmp[which(tmp$time >= range[1] & tmp$time <= range[2]),]
   tmp <- suppressWarnings(SummarizeGrowthByPlate(tmp))
+  tmp$sample <- samplesNames
+  
   return(tmp)
 }
 
@@ -571,7 +578,9 @@ updateSettings <- function(df, customP=NULL, groupsDF=NULL, groupsDFLvl=NULL) {
       if(is.logical(col)) {
         return("NA")
       }
+      return(col)
     })
+    View(settings$groupsDF)
     settings$groupsDFLvl <-  df$groupsDFLvl
   }
   settings$color <-  df$color

@@ -166,34 +166,6 @@ makeParametersPlot <- function(type, df, dataOD, input, params, customP) {
       theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())
     return(p_tile)
     
-    
-    
-    
-  }else if (type == "Logistic Curves") { #logistic curves
-    ps <- do.call(grid.arrange, lapply(1:nrow(df), function(sample_index) {
-      cp <- "green"
-      if(df[sample_index, "note"] != "") {
-        cp <- "red"
-      }
-      k <- df[sample_index, "k"]
-      N0 <- df[sample_index, "n0"]
-      r <- df[sample_index, "r"]
-      currentWell <- df$Well[sample_index]
-      p <- ggplot(dataOD, aes_string(x="time", y=sym(currentWell))) +
-        geom_line(size=1.2) +
-        stat_function(fun = function(t) k / (1 + ((k - N0) / N0) * exp(-r * t)), col=cp) +
-        ylim(0, 1.15*max(dataOD[-1], na.rm=T)) +
-        scale_x_continuous(expand=c(0,0), limits = input$auc_window) +
-        theme_classic() +
-        annotate(geom = 'text', label = paste(" ", currentWell), x = -Inf, y = Inf, hjust = 0, vjust = 1, col=cp) +
-        theme(axis.title=element_blank(),
-              axis.text=element_blank(),
-              axis.ticks=element_blank(),
-              panel.grid=element_blank())
-      
-      return(p)
-    }))
-    return(ps)
   }
 }
 
