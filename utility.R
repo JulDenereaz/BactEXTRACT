@@ -34,7 +34,6 @@ getFile <- function(fileData, lb, nfiles) {
     indexStart <- c(indexStart, nrow(rawdata))
     for (i in 1:(length(indexStart)-1)) {
       subTableDF <- rawdata[indexStart[i]:indexStart[i+1],]
-      
       #If Time is below Cycle, that means each row is a well, hence we need to translate the table to make each column = one well
       if(!biotek & grepl("Time", rawdata[indexStart[i]+1,1])) {
         subTableDF <- as.data.frame(t(subTableDF))
@@ -53,11 +52,11 @@ getFile <- function(fileData, lb, nfiles) {
       #Removing Temp and Cycle columns
       rawTableList$time <- subTableDF[, grep("time", tolower(colnames(subTableDF)))]/3600
       
-      
       rawTableList$time <- rawTableList$time[!is.na(rawTableList$time)]
       subTableDF <- subTableDF[1:length(rawTableList$time),]
       
-      subTableDF <- subTableDF[, -grep("temp|cycle|time|t..", tolower(colnames(subTableDF)))]
+      ##
+      subTableDF <- subTableDF[, -grep("temp|cycle|time|t°", tolower(colnames(subTableDF)))]
       name <- rawdata[indexStart[i]-1,1]
       if(biotek) {
         name <- rawdata[indexStart[i]-2, 1]
@@ -147,7 +146,7 @@ getDFlogticks <- function(fw, df, nrows, data, refcurve) {
 
 
 updateGroup <- function(groups, conditions, wells) {
-
+  
   if(is.null(groups)) {
     groups <-  data.frame(Wells = wells, KeepWell="Yes", Preview=NA, stringsAsFactors = F)
   }
@@ -243,13 +242,13 @@ dataMelter <- function(dataList, groups, time) {
   groups <- groups[groups$KeepWell == "Yes",]
   if(nrow(groups) == 0) {
     return(NULL)
-
+    
   }
   #converting the conditions columns into factor
   # groups[-c(1,2,3)] <- lapply(groups[-c(1,2,3)] , factor)
   
   conditions <- names(groups)[-c(1,2,3)]
-
+  
   #looping over each subTable, skipping the time vector
   dataList_melted <- lapply(dataList, function(subTable) {
     #subset only selected wells with KeepWell
@@ -330,7 +329,7 @@ normalise <- function(df=NULL, method=NULL, baseOD=NULL, wells=NULL) {
   if(!detectIfOD(df)) {
     return(df)
   }
-
+  
   if(method == 'Mininum') {
     return(data.frame(lapply(df, function(well) well - min(well, na.rm=T) + as.numeric(baseOD, na.rm=T)), check.names = F))
   }else if(method == '1st value') {
@@ -515,52 +514,52 @@ getLogisticParameters <- function(timeCol, plate, range) {
   return(tmp)
 }
 
-
-saveUpdate <- function(session, df, customP=NULL, groupsDF=NULL, groupsDFLvl=NULL) {
-  if(!is.null(customP)) {
-    updateStore(session, name = "customP", value = customP)
-    updateStore(session, name = "groupsDF", value = groupsDF)
-    updateStore(session, name = "groupsDFLvl", value = groupsDFLvl)
-  }else {
-    updateStore(session, name = "customP", value = df$customP)
-    updateStore(session, name = "groupsDF", value = df$groupsDF)
-    updateStore(session, name = "groupsDFLvl", value = df$groupsDFLvl)
-  }
-  updateStore(session, name = "color", value = df$color)
-  updateStore(session, name = "linetype", value = df$linetype)
-  updateStore(session, name = "shape", value = df$shape)
-  updateStore(session, name = "grouping", value = df$grouping)
-  updateStore(session, name = "fw", value = df$fw)
-  updateStore(session, name = "referenceCurve", value = df$referenceCurve)
-  updateStore(session, name = "nRowsFacets", value = df$nRowsFacets)
-  updateStore(session, name = "se", value = df$se)
-  updateStore(session, name = "conditionsUI_Input", value = df$conditionsUI_Input )
-
-  updateStore(session, name = "height", value = df$height)
-  updateStore(session, name = "width", value = df$width)
-  updateStore(session, name = "pal", value = df$pal)
-  updateStore(session, name = "norm", value = df$norm)
-  updateStore(session, name = "norm_baseOD", value = df$norm_baseOD)
-  updateStore(session, name = "techAggr", value = df$techAggr)
-  updateStore(session, name = "techAggrN", value = df$techAggrN)
-  updateStore(session, name = "x_axis_title", value = df$x_axis_title)
-  updateStore(session, name = "y_axis_title", value = df$y_axis_title)
-  updateStore(session, name = "customThemeUI", value = df$customThemeUI)
-  updateStore(session, name = "type_plot_selector", value = df$type_plot_selector)
-  updateStore(session, name = "lvlOrderSelect", value = df$lvlOrderSelect)
-  updateStore(session, name = "size_l", value = df$size_l)
-  updateStore(session, name = "size_p", value = df$size_p)
-  updateStore(session, name = "theme", value = df$theme)
-  updateStore(session, name = "params_x_scale", value = df$params_x_scale)
-  updateStore(session, name = "params_y_scale", value = df$params_y_scale)
-  updateStore(session, name = "range", value = df$range)
-  updateStore(session, name = "logScale", value = df$logScale)
-  updateStore(session, name = "data_selector", value = df$data_selector)
-  updateStore(session, name = "param_selector", value = df$param_selector)
-  updateStore(session, name = "secPlotMethod", value = df$secPlotMethod)
-  updateStore(session, name = "norm_lagPhase", value = df$norm_lagPhase)
-  updateStore(session, name = "normByWells", value = df$normByWells)
-}
+# 
+# saveUpdate <- function(session, df, customP=NULL, groupsDF=NULL, groupsDFLvl=NULL) {
+#   if(!is.null(customP)) {
+#     updateStore(session, name = "customP", value = customP)
+#     updateStore(session, name = "groupsDF", value = groupsDF)
+#     updateStore(session, name = "groupsDFLvl", value = groupsDFLvl)
+#   }else {
+#     updateStore(session, name = "customP", value = df$customP)
+#     updateStore(session, name = "groupsDF", value = df$groupsDF)
+#     updateStore(session, name = "groupsDFLvl", value = df$groupsDFLvl)
+#   }
+#   updateStore(session, name = "color", value = df$color)
+#   updateStore(session, name = "linetype", value = df$linetype)
+#   updateStore(session, name = "shape", value = df$shape)
+#   updateStore(session, name = "grouping", value = df$grouping)
+#   updateStore(session, name = "fw", value = df$fw)
+#   updateStore(session, name = "referenceCurve", value = df$referenceCurve)
+#   updateStore(session, name = "nRowsFacets", value = df$nRowsFacets)
+#   updateStore(session, name = "se", value = df$se)
+#   updateStore(session, name = "conditionsUI_Input", value = df$conditionsUI_Input )
+#   
+#   updateStore(session, name = "height", value = df$height)
+#   updateStore(session, name = "width", value = df$width)
+#   updateStore(session, name = "pal", value = df$pal)
+#   updateStore(session, name = "norm", value = df$norm)
+#   updateStore(session, name = "norm_baseOD", value = df$norm_baseOD)
+#   updateStore(session, name = "techAggr", value = df$techAggr)
+#   updateStore(session, name = "techAggrN", value = df$techAggrN)
+#   updateStore(session, name = "x_axis_title", value = df$x_axis_title)
+#   updateStore(session, name = "y_axis_title", value = df$y_axis_title)
+#   updateStore(session, name = "customThemeUI", value = df$customThemeUI)
+#   updateStore(session, name = "type_plot_selector", value = df$type_plot_selector)
+#   updateStore(session, name = "lvlOrderSelect", value = df$lvlOrderSelect)
+#   updateStore(session, name = "size_l", value = df$size_l)
+#   updateStore(session, name = "size_p", value = df$size_p)
+#   updateStore(session, name = "theme", value = df$theme)
+#   updateStore(session, name = "params_x_scale", value = df$params_x_scale)
+#   updateStore(session, name = "params_y_scale", value = df$params_y_scale)
+#   updateStore(session, name = "range", value = df$range)
+#   updateStore(session, name = "logScale", value = df$logScale)
+#   updateStore(session, name = "data_selector", value = df$data_selector)
+#   updateStore(session, name = "param_selector", value = df$param_selector)
+#   updateStore(session, name = "secPlotMethod", value = df$secPlotMethod)
+#   updateStore(session, name = "norm_lagPhase", value = df$norm_lagPhase)
+#   updateStore(session, name = "normByWells", value = df$normByWells)
+# }
 
 
 
@@ -580,7 +579,6 @@ updateSettings <- function(df, customP=NULL, groupsDF=NULL, groupsDFLvl=NULL) {
       }
       return(col)
     })
-    View(settings$groupsDF)
     settings$groupsDFLvl <-  df$groupsDFLvl
   }
   settings$color <-  df$color
@@ -637,11 +635,11 @@ removePattern <- function(df, x, replacem) {
   })
   return(df)
 }
-  
-  
-  
-  
-  
+
+
+
+
+
 
 
 isHex <- function(vector) {

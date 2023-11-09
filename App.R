@@ -190,11 +190,7 @@ server <- function(input, output, session) {
     updateStore(session, name='settings', value=temp)
     showNotification('Successfully saved locally', type='message')
   })  
-  
-  
-  
-  observeEvent(input$loadGroupsStorage, {
-    req(v$groups)
+  loadGroupsStrorage <- reactive({
     repl <- as.data.frame(v$settings$groupsDF)
     if(nrow(repl) != nrow(v$groups)) {
       showNotification('Number of rows differs from save and current file', type='error')
@@ -212,6 +208,13 @@ server <- function(input, output, session) {
     })
     
     v$loadedFromSave <- T
+  })
+  
+  
+  
+  observeEvent(input$loadGroupsStorage, {
+    req(v$groups)
+    loadGroupsStrorage()
     showNotification('Successfully loaded Groups Design')
   })
   
@@ -228,18 +231,18 @@ server <- function(input, output, session) {
       output$groups <- NULL
       output$plot_auc_window <- NULL
     }
-
+    
     progress <- shiny::Progress$new()
     on.exit(progress$close())
     progress$set(message = "Reading files...", value = 0)
     rawdata_file_list <- do.call(list, lapply(1:nrow(input$files), function(r) {
-          obj <- tryCatch({
-            getFile(input$files[r,],  lb=progress, n=length(input$files$datapath))
-            },
-            error = function(e) {
-              showNotification(e$message, type='error',closeButton = T, duration = NULL)
-              return(NULL)
-            })
+      obj <- tryCatch({
+        getFile(input$files[r,],  lb=progress, n=length(input$files$datapath))
+      },
+      error = function(e) {
+        showNotification(e$message, type='error',closeButton = T, duration = NULL)
+        return(NULL)
+      })
     }))
     names(rawdata_file_list) <- input$files$name
     if(list(NULL) %in% rawdata_file_list) {
@@ -283,7 +286,7 @@ server <- function(input, output, session) {
     })
     
     #rawdata_list contains the merged files sub-tables, OD first, then followed by any additional luminescence/RLU etc.. tables
-
+    
     
     if(!is.null(input$localStorage$settings)) {
       v$settings <- input$localStorage$settings
@@ -364,8 +367,8 @@ server <- function(input, output, session) {
         hot_table(highlightCol = T, highlightRow = T, allowRowEdit =F)
     })
   })
-
-
+  
+  
   
   toListenNormMerge <- reactive({
     list(input$techAggr, input$norm, v$rawdata_list)
@@ -382,7 +385,7 @@ server <- function(input, output, session) {
       output$techAggrUI <- NULL
     }
     if(input$norm == "Specific Well(s)") {
-
+      
       output$normByWellsUI <- renderUI({
         selectInput('normByWells', label="Wells to use for normalisation:", multiple = T, choices = v_names, selected=v$settings$normByWells)
       })
@@ -422,8 +425,6 @@ server <- function(input, output, session) {
       }
     }
     v$groups <- updateGroup(isolate(v$groups), v$conditions, colnames(aggdata_list[[1]]))
-
-    
     v$interactions <- getInteractions(v$conditions)
     
     # vertical normalisation, only if OD
@@ -431,7 +432,6 @@ server <- function(input, output, session) {
     v$dataList <- lapply(v$dataList, function(dt) {
       return(normalise(dt, input$norm, input$norm_baseOD, input$normByWells))
     })
-    
     # horizontal normalisation
     v$dataList <- lagNorm(isolate(v$dataList), input$norm_lagPhase)
     v$toCalculateParams <- T
@@ -456,7 +456,7 @@ server <- function(input, output, session) {
     output$graph_optionsUI <- renderUI({
       fluidPage(
         list(
-
+          
           splitLayout(
             column(
               width=12,
@@ -518,8 +518,8 @@ server <- function(input, output, session) {
             textInput('customColorPalette', 'Custom Color Palette:', value=paste(isolate(v$settings$customP), collapse=","),  placeholder = "#4b123f, #cb13b2, ...")
           ),
           splitLayout(
-            numericInput('height', 'Height (Inches):', value=orNull(isolate(v$settings$height), 5), min = 4, max = 50, step = 1),
-            numericInput('width', 'Width: (Inches)', value=orNull(isolate(v$settings$width), 10), min = 4, max = 50, step = 1),
+            numericInput('height', 'Height (Inches):', value=orNull(isolate(v$settings$height), 5), min = 4, max = 49, step = 1),
+            numericInput('width', 'Width: (Inches)', value=orNull(isolate(v$settings$width), 10), min = 4, max = 49, step = 1),
             
           ),
           tags$hr(),
@@ -553,8 +553,8 @@ server <- function(input, output, session) {
         )
       )
     })
-
-
+    
+    
     
   })
   
@@ -574,7 +574,7 @@ server <- function(input, output, session) {
     
   })
   
-
+  
   
   
   observeEvent(input$customColorPalette, {
@@ -624,7 +624,7 @@ server <- function(input, output, session) {
       }
     }
     v$oldWells <- v$groupsDF$KeepWell
-
+    
     
     
     if(is.null(v$dataList_melted)) {
@@ -730,7 +730,7 @@ server <- function(input, output, session) {
         )
       )
     })
-
+    
     
     observeEvent(input$fw, {
       #Only if facetWrap is select, and at least two different levels in that column
@@ -792,12 +792,12 @@ server <- function(input, output, session) {
         labs(
           x = "Time [h]",
           y ="Cell Density [OD 595nm]")
-
+      
       return(p)
     }, height = 250)
     calculateParams()
   })
-
+  
   calculateParams <- reactive({
     progress <- shiny::Progress$new()
     on.exit(progress$close())
@@ -896,7 +896,7 @@ server <- function(input, output, session) {
       return(ps)
     })
   })
-
+  
   
   
   ##### lvl Order Sorter #####
@@ -916,7 +916,7 @@ server <- function(input, output, session) {
   observeEvent(input$type_plot_selector, {
     reactPlot()
   })
-
+  
   reactPlot <- function() {
     output$plot <- renderPlot({
       # req(input$type_plot_selector)
