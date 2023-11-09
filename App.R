@@ -461,7 +461,7 @@ server <- function(input, output, session) {
             column(
               width=12,
               style="padding-left: 0px;padding-right: 0px;",
-              selectInput('color', 'Color:', choices=c("None", v$conditions, v$interactions), selected = v$settings$color, width='100%'),
+              selectInput('color', 'Color:', choices=c("None", v$conditions, v$interactions), selected = orNull(v$settings$color, v$conditions[1]), width='100%'),
               selectInput('linetype', 'Linetype:', choices=c("None", v$conditions), selected = v$settings$linetype, width='100%'),
               selectInput('shape', 'Shape:', choices=c("None", v$conditions), selected = v$settings$shape, width='100%'),
               selectInput('grouping', 'Grouping:', choices=c("None", v$interactions), selected = v$settings$grouping, width='100%'),
@@ -773,6 +773,7 @@ server <- function(input, output, session) {
   
   ##### Parameters #####
   observeEvent(input$auc_window, {
+    calculateParams()
     output$plot_auc_window <- renderPlot({
       # df <- isolate(v$dataList_melted[[1]])
       if(length(v$dataList[[input$data_selector]]) == 0) {
@@ -795,7 +796,8 @@ server <- function(input, output, session) {
       
       return(p)
     }, height = 250)
-    calculateParams()
+    
+
   })
   
   calculateParams <- reactive({
@@ -809,6 +811,7 @@ server <- function(input, output, session) {
     }
     n <- length(dt)
     v$params_list <- lapply(dt, function(subTable) {
+      subTable <- as.data.frame(subTable)
       progress$inc(1/(n*5), detail = "")
       subTable <- subTable[v$groupsDF$KeepWell == "Yes"]
       progress$inc(1/(n*5), detail = "")

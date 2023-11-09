@@ -39,9 +39,9 @@ makePlot <- function(dfRaw, input, customP, ylabel="", od=F, yRange) {
 
   if(input$linetype != "None") {
     p <- p + aes_string(linetype=input$linetype) +
-      geom_line( size=input$size_l)
+      geom_line( linewidth=input$size_l)
   }else if(input$shape == "None") {
-    p <- p + geom_line(size=input$size_l)
+    p <- p + geom_line(linewidth=input$size_l)
   }
   
 
