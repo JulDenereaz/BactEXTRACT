@@ -28,10 +28,9 @@ library(Cairo)
 library(jsonlite)
 library(xlsx)
 source('utility.R', local = TRUE)
+
 source('plot.R', local = TRUE)
-
-
-version <- "0.5"
+version = "1.0"
 
 ##### UI #####
 ui <- dashboardPage(
@@ -67,7 +66,7 @@ ui <- dashboardPage(
       width=12,
       align="center", 
       p('\u00A9 Julien D\u00E9n\u00E9r\u00E9az'),
-      p(paste0('2022 - Version ', version))
+      p(paste0('2023 - Version ', version))
     )
     
   ),
