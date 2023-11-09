@@ -37,6 +37,12 @@ version <- "0.5"
 ui <- dashboardPage(
   dashboardHeader(title = "BactEXTRACT"),
   dashboardSidebar(
+    sidebarMenu(
+      menuItem("Links and Infos", tabName = "menu_2", icon=icon("circle-info"),
+               menuSubItem(text="Github", href='https://github.com/JulDenereaz/BactEXTRACT', icon=icon("github")),
+               menuSubItem(text="e-mail", href='mailto:julien.denereaz@unil.ch', icon=icon("envelope"))
+      )
+    ),
     fluidPage(
       list(
         h3('Uploads :')
