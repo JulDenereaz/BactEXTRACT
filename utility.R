@@ -616,6 +616,7 @@ updateSettings <- function(df, customP=NULL, groupsDF=NULL, groupsDFLvl=NULL) {
   settings$data_selector <-  df$data_selector
   settings$param_selector <-  df$param_selector
   settings$secPlotMethod <-  df$secPlotMethod
+  settings$secPlotDisplay <-  df$secPlotDisplay
   settings$norm_lagPhase <-  df$norm_lagPhase
   settings$normByWells <-  df$normByWells
   return(settings)

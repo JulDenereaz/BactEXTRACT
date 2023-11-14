@@ -87,7 +87,7 @@ makePlot <- function(dfRaw, input, customP, ylabel="", od=F, yRange) {
     tmp = round(as.numeric(yRange), 1)
     lims <- c(tmp[1], tmp[2])
     params <- list(limits=lims, expand=c(0, 0))
-    p <- p + theme(axis.ticks = element_line(size=input$size/25), axis.ticks.length = unit(0.3, "cm"))
+    p <- p + theme(axis.ticks = element_line(linewidth=input$size/25), axis.ticks.length = unit(0.3, "cm"))
   }
 
   p <-  p +

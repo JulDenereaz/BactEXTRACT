@@ -28,9 +28,11 @@ library(Cairo)
 library(jsonlite)
 library(xlsx)
 source('utility.R', local = TRUE)
-
 source('plot.R', local = TRUE)
 version = "1.0"
+
+example
+
 
 ##### UI #####
 ui <- dashboardPage(
@@ -71,6 +73,7 @@ ui <- dashboardPage(
     
   ),
   dashboardBody(
+    shinyjs::useShinyjs(),
     tags$style(type = "text/css", "#map {height: calc(120vh - 80px) !important;}"),
     tags$style(HTML('.shiny-split-layout>div {overflow: visible;}')),
     fluidRow(
@@ -83,7 +86,7 @@ ui <- dashboardPage(
             box(
               height='50vh',
               width=3,
-              title= p("2. Settings", 
+              title= p("1. Settings", 
                        actionButton('previewTable', 'Preview Imported Tables', icon = icon('magnifying-glass'),
                                     class = 'btn-xs', title = '', style = "position: absolute; right: 10px")
               ),
@@ -177,12 +180,14 @@ server <- function(input, output, session) {
   observeEvent(input$loadSaveFromFile, {
     v$settings <- updateSettings(fromJSON(input$loadSaveFromFile$datapath))
     showNotification('Successfully imported settings file', type='message')
+    
   })  
   
   observeEvent(input$deleteLocalSave, {
     v$settings <- list()
     updateStore(session, name='settings', value=NULL)
     showNotification('Deleted local Save', type='message')
+    
   })
   
   observeEvent(input$saveLocally, {
@@ -605,6 +610,8 @@ server <- function(input, output, session) {
   observeEvent(input$groups, {
     #This is called everytime the input$groups table gets modified by the user
     req(input$groups)
+    
+    
     
     if(!v$loadedFromSave) {
       v$groupsDF <- data.frame(hot_to_r(input$groups))
