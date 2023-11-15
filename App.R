@@ -31,7 +31,9 @@ source('utility.R', local = TRUE)
 source('plot.R', local = TRUE)
 version = "1.0"
 
-example
+example <- data.frame(name="Example.xlsx", type=" application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", datapath="./Examples/Example.xlsx")
+  
+example_set <- "./Examples/Settings_Example.json"
 
 
 ##### UI #####
@@ -41,6 +43,7 @@ ui <- dashboardPage(
   shinyjs::useShinyjs(),
     sidebarMenu(
       menuItem("Links and Infos", tabName = "menu_2", icon=icon("circle-info"),
+               actionButton("loadExample", "Load Example data"),
                menuSubItem(text="Github", href='https://github.com/JulDenereaz/BactEXTRACT', icon=icon("github")),
                menuSubItem(text="e-mail", href='mailto:julien.denereaz@unil.ch', icon=icon("envelope")),
                menuSubItem('\u00A9 Julien D\u00E9n\u00E9r\u00E9az', icon=icon(NULL)),
@@ -191,6 +194,35 @@ server <- function(input, output, session) {
   v$loadedFromSave <- F
   v$settings <- list()
   
+  observeEvent(input$loadExample, {
+    lapply(react, function(reactVal){
+      v[[reactVal]] <- NULL
+    })
+    output$graph_optionsUI <- NULL
+    output$themeUI <- NULL
+    output$plot <- NULL
+    output$groups <- NULL
+    output$plot_auc_window <- NULL
+    progress <- shiny::Progress$new()
+    on.exit(progress$close())
+    progress$set(message = "Reading files...", value = 0)
+    rawdata_file_list <- do.call(list, lapply(1:nrow(example), function(r) {
+      obj <- tryCatch({
+        getFile(example[r,],  lb=progress, n=length(input$files$datapath))
+      },
+      error = function(e) {
+        showNotification(e$message, type='error',closeButton = T, duration = NULL)
+        return(NULL)
+      })
+    }))
+    names(rawdata_file_list) <- example$name
+    v$rawdata_file_list <- rawdata_file_list
+    proceedWithFile()
+    
+    v$settings <- updateSettings(fromJSON(example_set))
+  })
+  
+  
   
   observeEvent(input$loadSaveFromFile, {
     v$settings <- updateSettings(fromJSON(input$loadSaveFromFile$datapath))
@@ -245,6 +277,7 @@ server <- function(input, output, session) {
   
   ##### File Input #####
   observeEvent(input$files, {
+    print(input$files)
     req(input$files)
     if(!is.null(v$rawdata_list)) {
       lapply(react, function(reactVal){
@@ -299,7 +332,12 @@ server <- function(input, output, session) {
       }
       # return()
     }
-    
+    v$rawdata_file_list <- rawdata_file_list
+    proceedWithFile()
+  })
+  
+  proceedWithFile <- reactive({
+    rawdata_file_list <- v$rawdata_file_list
     timeCols <- lapply(rawdata_file_list, function(rawdt) {
       return(rawdt$time)
     })
