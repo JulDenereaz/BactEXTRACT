@@ -517,54 +517,6 @@ getLogisticParameters <- function(timeCol, plate, range) {
   return(tmp)
 }
 
-# 
-# saveUpdate <- function(session, df, customP=NULL, groupsDF=NULL, groupsDFLvl=NULL) {
-#   if(!is.null(customP)) {
-#     updateStore(session, name = "customP", value = customP)
-#     updateStore(session, name = "groupsDF", value = groupsDF)
-#     updateStore(session, name = "groupsDFLvl", value = groupsDFLvl)
-#   }else {
-#     updateStore(session, name = "customP", value = df$customP)
-#     updateStore(session, name = "groupsDF", value = df$groupsDF)
-#     updateStore(session, name = "groupsDFLvl", value = df$groupsDFLvl)
-#   }
-#   updateStore(session, name = "color", value = df$color)
-#   updateStore(session, name = "linetype", value = df$linetype)
-#   updateStore(session, name = "shape", value = df$shape)
-#   updateStore(session, name = "grouping", value = df$grouping)
-#   updateStore(session, name = "fw", value = df$fw)
-#   updateStore(session, name = "referenceCurve", value = df$referenceCurve)
-#   updateStore(session, name = "nRowsFacets", value = df$nRowsFacets)
-#   updateStore(session, name = "se", value = df$se)
-#   updateStore(session, name = "conditionsUI_Input", value = df$conditionsUI_Input )
-#   
-#   updateStore(session, name = "height", value = df$height)
-#   updateStore(session, name = "width", value = df$width)
-#   updateStore(session, name = "pal", value = df$pal)
-#   updateStore(session, name = "norm", value = df$norm)
-#   updateStore(session, name = "norm_baseOD", value = df$norm_baseOD)
-#   updateStore(session, name = "techAggr", value = df$techAggr)
-#   updateStore(session, name = "techAggrN", value = df$techAggrN)
-#   updateStore(session, name = "x_axis_title", value = df$x_axis_title)
-#   updateStore(session, name = "y_axis_title", value = df$y_axis_title)
-#   updateStore(session, name = "customThemeUI", value = df$customThemeUI)
-#   updateStore(session, name = "type_plot_selector", value = df$type_plot_selector)
-#   updateStore(session, name = "lvlOrderSelect", value = df$lvlOrderSelect)
-#   updateStore(session, name = "size_l", value = df$size_l)
-#   updateStore(session, name = "size_p", value = df$size_p)
-#   updateStore(session, name = "theme", value = df$theme)
-#   updateStore(session, name = "params_x_scale", value = df$params_x_scale)
-#   updateStore(session, name = "params_y_scale", value = df$params_y_scale)
-#   updateStore(session, name = "range", value = df$range)
-#   updateStore(session, name = "logScale", value = df$logScale)
-#   updateStore(session, name = "data_selector", value = df$data_selector)
-#   updateStore(session, name = "param_selector", value = df$param_selector)
-#   updateStore(session, name = "secPlotMethod", value = df$secPlotMethod)
-#   updateStore(session, name = "norm_lagPhase", value = df$norm_lagPhase)
-#   updateStore(session, name = "normByWells", value = df$normByWells)
-# }
-
-
 
 updateSettings <- function(df, customP=NULL, groupsDF=NULL, groupsDFLvl=NULL) {
   settings <- list()
@@ -639,9 +591,6 @@ removePattern <- function(df, x, replacem) {
   })
   return(df)
 }
-
-
-
 
 
 

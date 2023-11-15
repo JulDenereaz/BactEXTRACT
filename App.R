@@ -38,42 +38,57 @@ example
 ui <- dashboardPage(
   dashboardHeader(title = "BactEXTRACT"),
   dashboardSidebar(
+  shinyjs::useShinyjs(),
     sidebarMenu(
       menuItem("Links and Infos", tabName = "menu_2", icon=icon("circle-info"),
                menuSubItem(text="Github", href='https://github.com/JulDenereaz/BactEXTRACT', icon=icon("github")),
-               menuSubItem(text="e-mail", href='mailto:julien.denereaz@unil.ch', icon=icon("envelope"))
+               menuSubItem(text="e-mail", href='mailto:julien.denereaz@unil.ch', icon=icon("envelope")),
+               menuSubItem('\u00A9 Julien D\u00E9n\u00E9r\u00E9az', icon=icon(NULL)),
+               menuSubItem(paste0('2023 - Version ', version), icon = icon(NULL))
       )
     ),
+    tags$hr(),
     fluidPage(
       list(
-        h3('Uploads :')
+        h3("Growth Data:")
       )
     ),
     fileInput("files", "Choose TECAN Excel File(s)",
               multiple = TRUE,
               accept = c(".xlsx", ".txt")),
+    fluidPage(
+      list(
+        h3("Settings:")
+      )
+    ),
+    initStore("localStorage", "BactEXTRACT_storage"),
     fileInput("loadSaveFromFile", "Choose Settings File",
               multiple = FALSE,
               accept = c(".json")),
-    initStore("localStorage", "BactEXTRACT_storage"),
+    column(12, 
+      align="left",
+      actionButton("saveLocally", label = "Save locally in Browser", icon=icon("floppy-disk"), style="margin-left:0px;"),
+      tags$p(""),
+      
+      downloadButton("download_settings", label = "Download settings"),
+      tags$br(),
+      tags$br(),
+      actionButton("deleteLocalSave", label = "Reset settings", icon=icon("trash"), style="margin-left:0px;", class = "btn-danger"),
+      bsTooltip("saveLocally", "Save the current settings in your web-browser local storage", placement = "bottom", trigger = "hover", options = NULL),
+      bsTooltip("download_settings", "Download a .json file containing your current settings", placement = "bottom", trigger = "hover", options = NULL),
+      bsTooltip("deleteLocalSave", "Reset current settings to defaults, and delete web-browser local storage of BactEXTRACT", placement = "bottom", trigger = "hover", options = NULL),
+    ),
+    
+    
     uiOutput("downloads"),
     
     div(style="height:130vh;",
         width=12,
         
-    ),
-    
-    tags$hr(style='margin-bottom:0px'),
-    column(
-      width=12,
-      align="center", 
-      p('\u00A9 Julien D\u00E9n\u00E9r\u00E9az'),
-      p(paste0('2023 - Version ', version))
     )
     
   ),
   dashboardBody(
-    shinyjs::useShinyjs(),
     tags$style(type = "text/css", "#map {height: calc(120vh - 80px) !important;}"),
     tags$style(HTML('.shiny-split-layout>div {overflow: visible;}')),
     fluidRow(
@@ -121,7 +136,7 @@ ui <- dashboardPage(
               width=12,
               title= NULL,
               status = 'primary',
-              height = '100vh',
+              height = '50vh',
               div(
                 style="overflow-x:auto;height:100%;",
                 shinycssloaders::withSpinner(
@@ -664,18 +679,18 @@ server <- function(input, output, session) {
                downloadButton("download_png", label = "Plot (PNG)"),
                tags$p(""),
                tags$hr(),
-               h3("Settings :"),
-               actionButton("saveLocally", label = "Save locally in Browser", icon=icon("floppy-disk"), style="margin-left:0px;"),
-               tags$p(""),
-               downloadButton("download_settings", label = "Download settings"),
-               tags$p(""),
-               tags$p(""),
-               tags$br(),
-               actionButton("deleteLocalSave", label = "Reset settings", icon=icon("trash"), style="margin-left:0px;", class = "btn-danger"),
-               bsTooltip("saveLocally", "Save the current settings in your web-browser local storage", placement = "bottom", trigger = "hover", options = NULL),
-               bsTooltip("download_settings", "Download a .json file containing your current settings", placement = "bottom", trigger = "hover", options = NULL),
-               bsTooltip("deleteLocalSave", "Reset current settings to defaults, and delete web-browser local storage of BactEXTRACT", placement = "bottom", trigger = "hover", options = NULL)
-               
+               # h3("Settings :"),
+               # actionButton("saveLocally", label = "Save locally in Browser", icon=icon("floppy-disk"), style="margin-left:0px;"),
+               # tags$p(""),
+               # downloadButton("download_settings", label = "Download settings"),
+               # tags$p(""),
+               # tags$p(""),
+               # tags$br(),
+               # actionButton("deleteLocalSave", label = "Reset settings", icon=icon("trash"), style="margin-left:0px;", class = "btn-danger"),
+               # bsTooltip("saveLocally", "Save the current settings in your web-browser local storage", placement = "bottom", trigger = "hover", options = NULL),
+               # bsTooltip("download_settings", "Download a .json file containing your current settings", placement = "bottom", trigger = "hover", options = NULL),
+               # bsTooltip("deleteLocalSave", "Reset current settings to defaults, and delete web-browser local storage of BactEXTRACT", placement = "bottom", trigger = "hover", options = NULL)
+               # 
         )
       )
       
@@ -804,7 +819,7 @@ server <- function(input, output, session) {
         coord_cartesian(clip = "off") +
         labs(
           x = "Time [h]",
-          y ="Cell Density [OD 595nm]")
+          y ="Cell Density")
       
       return(p)
     }, height = 250)
@@ -894,7 +909,7 @@ server <- function(input, output, session) {
         N0 <- df_params[df_params$Wells==well, "n0"]
         r <- df_params[df_params$Wells==well, "r"]
         p <- ggplot(dataOD, aes_string(x="time", y=sym(well))) +
-          geom_line(size=1.2) +
+          geom_point(size=1.2, alpha=0.7) +
           stat_function(fun = function(t) k / (1 + ((k - N0) / N0) * exp(-r * t)), col=cp, size=1.2) +
           ylim(0, 1.15*max(dataOD[-1], na.rm=T)) +
           scale_x_continuous(expand=c(0,0), limits = input$auc_window) +
