@@ -56,7 +56,7 @@ ui <- dashboardPage(
         h3("Growth Data:")
       )
     ),
-    fileInput("files", "Choose TECAN Excel File(s)",
+    fileInput("files", "Choose plate reader data File(s)",
               multiple = TRUE,
               accept = c(".xlsx", ".txt")),
     fluidPage(
