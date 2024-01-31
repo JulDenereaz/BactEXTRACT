@@ -483,17 +483,19 @@ server <- function(input, output, session) {
     }else {
       aggdata_list <- v$rawdata_list
     }
-    
+    v$timeScale <- NULL
     if(input$timeScaleChange == "Seconds") {
       v$timeScale <- v$timeScaleRaw /3600
+      showNotification('Transformed time scale from Seconds to Hours', type='message', duration = 3)
     }else if(input$timeScaleChange == "Minutes") {      
       v$timeScale <- v$timeScaleRaw /60
+      showNotification('Transformed time scale from Minutes to Hours', type='message', duration = 3)
     }else if(input$timeScaleChange == "hh:mm:ss") {
-      v$timeScale <- v$timeScaleRaw *86400
+      v$timeScale <- v$timeScaleRaw *24
+      showNotification('Transformed time scale from hh:mm:ss to Hours', type='message', duration = 3)
     }else {
       v$timeScale <- v$timeScaleRaw *1
     }
-    
     
     if(!is.null(v$groups)) {
       #Reset the v$groups if the user change the settings of technical replicate aggregating

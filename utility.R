@@ -51,11 +51,14 @@ getFile <- function(fileData, lb, nfiles) {
     subTableDF <- subTableDF[rowSums(is.na(subTableDF))<ncol(subTableDF),]
     
     
-    #Extracting Time scale
+    #Extracting Time scale and removing unwanted column such as Temperature
     rawTableList$time <- subTableDF[, grep("time", tolower(colnames(subTableDF)))[1]]
     rawTableList$time <- rawTableList$time[!is.na(rawTableList$time)]
     subTableDF <- subTableDF[1:length(rawTableList$time),]
-    subTableDF <- subTableDF[,!grepl("temp|cycle|t°|time", tolower(colnames(subTableDF)))]
+    
+    subTableDF <- subTableDF[, -grepl("temp|cycle|time", tolower(colnames(subTableDF)))]
+    #\u00B0 is the ° symbol
+    subTableDF <- subTableDF[, -grepl("\u00B0", tolower(colnames(subTableDF)))]
     
     # 
 
@@ -77,7 +80,6 @@ getFile <- function(fileData, lb, nfiles) {
     
     
     
-    
     # #Append to the list
     rawTableList[[name_i]] <- as.data.frame(subTableDF)
     lb$inc((1/(nfiles))/length(indexStart), detail = "")
@@ -85,7 +87,7 @@ getFile <- function(fileData, lb, nfiles) {
     
   }
 
-  
+
   
   return(rawTableList)
   
