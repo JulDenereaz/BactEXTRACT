@@ -363,7 +363,7 @@ server <- function(input, output, session) {
       fluidPage(
         list(
           splitLayout(
-            selectInput('timeScaleChange', 'Time scale units:', selected=orNull(v$settings$norm_baseOD, "Seconds"), choices = c("Seconds", "Hours", "hh:mm:ss"))
+            selectInput('timeScaleChange', 'Time scale units:', selected=orNull(v$settings$norm_baseOD, "Seconds"), choices = c("Seconds", "Minutes", "Hours", "hh:mm:ss"))
           ),
           bsTooltip("timeScaleChange", "Base unit of the time scale in raw data", placement = "left", trigger = "hover", options = NULL),
 
@@ -486,6 +486,8 @@ server <- function(input, output, session) {
     
     if(input$timeScaleChange == "Seconds") {
       v$timeScale <- v$timeScaleRaw /3600
+    }else if(input$timeScaleChange == "Minutes") {      
+      v$timeScale <- v$timeScaleRaw /60
     }else if(input$timeScaleChange == "hh:mm:ss") {
       v$timeScale <- v$timeScaleRaw *86400
     }else {
