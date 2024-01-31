@@ -277,7 +277,6 @@ server <- function(input, output, session) {
   
   ##### File Input #####
   observeEvent(input$files, {
-    print(input$files)
     req(input$files)
     if(!is.null(v$rawdata_list)) {
       lapply(react, function(reactVal){
@@ -341,7 +340,8 @@ server <- function(input, output, session) {
     timeCols <- lapply(rawdata_file_list, function(rawdt) {
       return(rawdt$time)
     })
-    v$timeScale <- timeCols[[which.max(lengths(timeCols))]]
+    v$timeScaleRaw <- timeCols[[which.max(lengths(timeCols))]]
+    v$timeScale <- v$timeScaleRaw *1
     v$subTableNames <- names(rawdata_file_list[[1]])[-1] #Not looping through the time vector
     v$rawdata_list <- mergeSubTables(rawdata_file_list, v$subTableNames, names(rawdata_file_list), length(v$timeScale))
     v$isOD <- lapply(v$rawdata_list, function(table) {
@@ -362,6 +362,11 @@ server <- function(input, output, session) {
     output$conditionsUI <- renderUI({
       fluidPage(
         list(
+          splitLayout(
+            selectInput('timeScaleChange', 'Time scale units:', selected=orNull(v$settings$norm_baseOD, "Seconds"), choices = c("Seconds", "Hours", "hh:mm:ss"))
+          ),
+          bsTooltip("timeScaleChange", "Base unit of the time scale in raw data", placement = "left", trigger = "hover", options = NULL),
+
           splitLayout(
             selectInput('techAggr', 'Tech. Repl. Merge:', choices=c("None", "Horizontal", "Vertical"), selected = v$settings$techAggr),
             numericInput('techAggrN', 'By:', value=orNull(v$settings$techAggrN, 3), min=2)
@@ -478,6 +483,15 @@ server <- function(input, output, session) {
     }else {
       aggdata_list <- v$rawdata_list
     }
+    
+    if(input$timeScaleChange == "Seconds") {
+      v$timeScale <- v$timeScaleRaw /3600
+    }else if(input$timeScaleChange == "hh:mm:ss") {
+      v$timeScale <- v$timeScaleRaw *86400
+    }else {
+      v$timeScale <- v$timeScaleRaw *1
+    }
+    
     
     if(!is.null(v$groups)) {
       #Reset the v$groups if the user change the settings of technical replicate aggregating
@@ -847,7 +861,7 @@ server <- function(input, output, session) {
       
       df <- melt(cbind(data.frame(time=v$timeScale), v$dataList[[input$data_selector]]),id="time")
       p <- ggplot(data=df, aes_string(x="time", y="value", group="variable")) +
-        geom_line(size=1.2, alpha=0.7) +
+        geom_line(linewidth=1.2, alpha=0.7) +
         scale_x_continuous(expand=c(0,0), limits = input$range) +
         scale_y_continuous(expand=c(0,0), limits = c(0, 1.15*max(df$value))) +
         annotate("rect",

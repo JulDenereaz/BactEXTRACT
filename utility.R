@@ -1,88 +1,99 @@
 themes <- c("BW" , "Classic", "Light", "Minimal", "Gray")
-react <- c("conditions", "rawdata_list", "dataList", "groups", "interactions", "params_list", "groupDF_subset")
+react <- c("conditions", "rawdata_list", "dataList", "groups", "timeScaleRaw", "timeScale", "interactions", "params_list", "groupDF_subset")
+
 
 getFile <- function(fileData, lb, nfiles) {
   rawTableList <- list()
+  biotek <- F
   if(file_ext(fileData$datapath) == "txt") {
-    rawdata <-  read.table(fileData$datapath, sep="\t", header=T, dec=",")
-    rawdata <- rawdata[,colSums(is.na(rawdata))<nrow(rawdata)]
-    rawdata <- rawdata[complete.cases(rawdata[,1]),]
-    rawdata <- as.data.frame(sapply(rawdata, as.numeric))
-    rawTableList$time <- rawdata$time
-    rawTableList[["OD"]] <- rawdata[-which(names(rawdata) == "time")]
-    
+    rawdata <-  read.table(fileData$datapath, header=F)
   }else {
     rawdata <- read.xlsx2(file=fileData$datapath, sheetIndex=1, as.data.frame=T, header=F, colIndex = 1:300)
-    #rawTableList is a list containing each table, starting with OD, and any additional measurement table, such as RLU, luminescence, or another OD...
-    #If tecan is biotek
-    biotek <- F
-    if(any(grepl("Synergy", rawdata))) {
-      #First column empty in synergy software => might wanna double check that
-      indexStart <- which(rawdata[-1]=='Time')
-      if(any(which(rawdata == "Results"))) {
-        #Removing the results part, after the last subtable
-        indexStop <- which(rawdata == "Results")
-        rawdata <- rawdata[1:indexStop,]
-      }
-      biotek <- T
-    }else {
-      indexStart <- which(rawdata=='Cycle Nr.')
-    }
-    if(length(indexStart) == 0) {
-      stop(paste0("Could not find the start of the data table in: ", fileData$name))
-    }
-    indexStart <- c(indexStart, nrow(rawdata))
-    for (i in 1:(length(indexStart)-1)) {
-      subTableDF <- rawdata[indexStart[i]:indexStart[i+1],]
-      #If Time is below Cycle, that means each row is a well, hence we need to translate the table to make each column = one well
-      if(!biotek & grepl("Time", rawdata[indexStart[i]+1,1])) {
+  }
+  if(tolower(rawdata[1,1]) == "time") {
+    indexStart <- 1
+  }else {
+    indexStart <- which(tolower(rawdata[1]) == "time" | tolower(rawdata$X2) == "time" | rawdata[1] == "Time [s]" | rawdata[2] == "Time [s]")
+  }
+  if(any(grepl("Synergy", rawdata))) {
+    indexStop <- which(rawdata$X1 == "Results")
+    biotek <- T
+    rawdata <- rawdata[1:indexStop,-1]
+  }
+  if(length(indexStart) == 0) {
+    stop(paste0("Could not find the start of the data table in: ", fileData$name))
+  }
+  indexStart <- c(indexStart, nrow(rawdata))
+  
+  name <- rawdata$X1[which(rawdata[1] == "Cycle Nr.")-1]
+  if(biotek) {
+    name <- rawdata$X1[which(rawdata[2] == "Time")-2]
+  }
+
+  for (i in 1:(length(indexStart)-1)) {
+    subTableDF <- rawdata[indexStart[i]:indexStart[i+1],]
+    #Transpose if wells per row
+    if(indexStart[i] > 1) {
+      if(grepl("Cycle", rawdata[indexStart[i]-1,1])) {
         subTableDF <- as.data.frame(t(subTableDF))
       }
-      #Setting first row as colnames
-      colnames(subTableDF) <- subTableDF[1,]
-      subTableDF <- subTableDF[-c(1),]
-      
-      #Removing non-numeric rows and columns
-      subTableDF <- as.data.frame(suppressWarnings(sapply(subTableDF, as.numeric)))
-      
-      #removing columns or rows with only NA in it
-      subTableDF <- subTableDF[, colSums(is.na(subTableDF)) != nrow(subTableDF)]
-      subTableDF <- subTableDF[rowSums(is.na(subTableDF)) != ncol(subTableDF),]
-      
-      #Removing Temp and Cycle columns
-      rawTableList$time <- subTableDF[, grep("time", tolower(colnames(subTableDF)))]/3600
-      
-      rawTableList$time <- rawTableList$time[!is.na(rawTableList$time)]
-      subTableDF <- subTableDF[1:length(rawTableList$time),]
-      
-      ##
-      subTableDF <- subTableDF[, -grep("temp|cycle|time|t°", tolower(colnames(subTableDF)))]
-      name <- rawdata[indexStart[i]-1,1]
-      if(biotek) {
-        name <- rawdata[indexStart[i]-2, 1]
-        rawTableList$time <- rawTableList$time*86400
-      }
-      if(is.na(name) | name == "") {
-        #if subtable not named, it is named OD 
-        name <- paste0("Sub-Table", i)
-        showNotification(paste0('The sub-table N°', i, ' of ', fileData$name, ' was named "Sub-Table"', i,' by default.'), type="warning")
-      }
-      
-      if(nrow(as.data.frame(subTableDF)) == 0 || length(subTableDF) == 0) {
-        stop(paste0("N. rows of ", name, "  dataframe is 0 in ", fileData$name))
-      }
-      
-      
-      #Append to the list
-      rawTableList[[name]] <- as.data.frame(subTableDF)
-      lb$inc((1/(nfiles))/length(indexStart), detail = "")
-      
-      
+    }
+    #Setting first row as colnames
+    colnames(subTableDF) <- subTableDF[1,]
+    subTableDF <- subTableDF[-1,]
+    
+    
+    #Removing non-numeric rows and columns
+    subTableDF <- as.data.frame(suppressWarnings(sapply(subTableDF, as.numeric)))
+    
+    #removing columns or rows with only NA in it
+    subTableDF <- subTableDF[,colSums(is.na(subTableDF))<nrow(subTableDF)]
+    subTableDF <- subTableDF[rowSums(is.na(subTableDF))<ncol(subTableDF),]
+    
+    
+    #Extracting Time scale
+    rawTableList$time <- subTableDF[, grep("time", tolower(colnames(subTableDF)))[1]]
+    rawTableList$time <- rawTableList$time[!is.na(rawTableList$time)]
+    subTableDF <- subTableDF[1:length(rawTableList$time),]
+    subTableDF <- subTableDF[,!grepl("temp|cycle|t°|time", tolower(colnames(subTableDF)))]
+    
+    # 
+
+    if(any(length(name) == 0, is.na(name), name == "")) {
+      name_i <- paste0("Sub-Table", i)
+      showNotification(paste0('The sub-table N°', i, ' of ', fileData$name, ' was named "Sub-Table"', i,' by default.'), type="warning")
+    }else {
+      name_i <- name[i]
     }
     
+    if(nrow(as.data.frame(subTableDF)) == 0 || length(subTableDF) == 0) {
+      stop(paste0("N. rows of ", name_i, "  dataframe is 0 in ", fileData$name))
+    }
+    
+    #Check of data
+    if(any(!sapply(subTableDF, is.numeric))) {
+      stop(paste0("Subtable ", name_i, " is not numerical"))
+    }
+    
+    
+    
+    
+    # #Append to the list
+    rawTableList[[name_i]] <- as.data.frame(subTableDF)
+    lb$inc((1/(nfiles))/length(indexStart), detail = "")
+    
+    
   }
+
+  
+  
   return(rawTableList)
+  
+  
+  
 }
+
+
 
 mergeSubTables <- function(rawdata_file_list, subNames, fileNames, nr) {
   out <- list()
@@ -547,6 +558,7 @@ updateSettings <- function(df, customP=NULL, groupsDF=NULL, groupsDFLvl=NULL) {
   settings$conditionsUI_Input <-  df$conditionsUI_Input 
   
   settings$height <-  df$height
+  settings$timeScaleChange <-  df$timeScaleChange
   settings$width <-  df$width
   settings$pal <-  df$pal
   settings$norm <-  df$norm
