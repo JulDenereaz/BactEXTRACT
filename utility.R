@@ -54,6 +54,14 @@ getFile <- function(fileData, lb, nfiles) {
     #Extracting Time scale and removing unwanted column such as Temperature
     rawTableList$time <- subTableDF[, grep("time", tolower(colnames(subTableDF)))[1]]
     rawTableList$time <- rawTableList$time[!is.na(rawTableList$time)]
+    
+    if(any(grepl("Synergy", rawdata))) {
+      rawTableList$time <- rawTableList$time*24
+    }else if(any(grepl("infinite|Tecan i-control|SparkControl", rawdata))) {
+      rawTableList$time <- rawTableList$time/3600
+    }
+    
+    
     subTableDF <- subTableDF[1:length(rawTableList$time),]
     
     subTableDF <- subTableDF[, !grepl("temp|cycle|time", tolower(colnames(subTableDF)))]

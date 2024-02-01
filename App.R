@@ -340,8 +340,9 @@ server <- function(input, output, session) {
     timeCols <- lapply(rawdata_file_list, function(rawdt) {
       return(rawdt$time)
     })
-    v$timeScaleRaw <- timeCols[[which.max(lengths(timeCols))]]
-    v$timeScale <- v$timeScaleRaw *1
+    # v$timeScaleRaw <- timeCols[[which.max(lengths(timeCols))]]
+    v$timeScale <- timeCols[[which.max(lengths(timeCols))]]
+    # v$timeScale <- v$timeScaleRaw *1
     v$subTableNames <- names(rawdata_file_list[[1]])[-1] #Not looping through the time vector
     v$rawdata_list <- mergeSubTables(rawdata_file_list, v$subTableNames, names(rawdata_file_list), length(v$timeScale))
     v$isOD <- lapply(v$rawdata_list, function(table) {
@@ -362,10 +363,10 @@ server <- function(input, output, session) {
     output$conditionsUI <- renderUI({
       fluidPage(
         list(
-          splitLayout(
-            selectInput('timeScaleChange', 'Time scale base unit:', selected=orNull(v$settings$norm_baseOD, "Seconds"), choices = c("Seconds", "Minutes", "Hours", "hh:mm:ss"))
-          ),
-          bsTooltip("timeScaleChange", "Base unit of the time scale in raw data", placement = "left", trigger = "hover", options = NULL),
+          # splitLayout(
+          #   selectInput('timeScaleChange', 'Time scale base unit:', selected=orNull(v$settings$norm_baseOD, "Seconds"), choices = c("Seconds", "Minutes", "Hours", "hh:mm:ss"))
+          # ),
+          # bsTooltip("timeScaleChange", "Base unit of the time scale in raw data", placement = "left", trigger = "hover", options = NULL),
 
           splitLayout(
             selectInput('techAggr', 'Tech. Repl. Merge:', choices=c("None", "Horizontal", "Vertical"), selected = v$settings$techAggr),
@@ -471,14 +472,14 @@ server <- function(input, output, session) {
     }
     req(v$rawdata_list)
     if(input$conditionsUI_Input == "") {
-      showNotification('You need at lest one condition', type='warning')
+      showNotification('You need at lest one condition', type='error')
     }
     req(input$conditionsUI_Input)
     v$conditions <- formartConditions(input$conditionsUI_Input)
-    if(max(v$timeScaleRaw) > 500) {
-      showNotification("The time scale seems too big. Did you adjust the unit ?", type="error")
-      return()
-    }
+    # if(max(v$timeScaleRaw) > 500) {
+    #   showNotification("The time scale seems too big. Did you adjust the unit ?", type="error")
+    #   return()
+    # }
     
     #Aggregating technical replicate by mean
     if(input$techAggr != "None") {
@@ -486,19 +487,19 @@ server <- function(input, output, session) {
     }else {
       aggdata_list <- v$rawdata_list
     }
-    v$timeScale <- NULL
-    if(input$timeScaleChange == "Seconds") {
-      v$timeScale <- v$timeScaleRaw /3600
-      showNotification('Transformed time scale from Seconds to Hours', type='message', duration = 3)
-    }else if(input$timeScaleChange == "Minutes") {      
-      v$timeScale <- v$timeScaleRaw /60
-      showNotification('Transformed time scale from Minutes to Hours', type='message', duration = 3)
-    }else if(input$timeScaleChange == "hh:mm:ss") {
-      v$timeScale <- v$timeScaleRaw *24
-      showNotification('Transformed time scale from hh:mm:ss to Hours', type='message', duration = 3)
-    }else {
-      v$timeScale <- v$timeScaleRaw *1
-    }
+    # v$timeScale <- NULL
+    # if(input$timeScaleChange == "Seconds") {
+    #   v$timeScale <- v$timeScaleRaw /3600
+    #   showNotification('Transformed time scale from Seconds to Hours', type='message', duration = 3)
+    # }else if(input$timeScaleChange == "Minutes") {      
+    #   v$timeScale <- v$timeScaleRaw /60
+    #   showNotification('Transformed time scale from Minutes to Hours', type='message', duration = 3)
+    # }else if(input$timeScaleChange == "hh:mm:ss") {
+    #   v$timeScale <- v$timeScaleRaw *24
+    #   showNotification('Transformed time scale from hh:mm:ss to Hours', type='message', duration = 3)
+    # }else {
+    #   v$timeScale <- v$timeScaleRaw *1
+    # }
     
     if(!is.null(v$groups)) {
       #Reset the v$groups if the user change the settings of technical replicate aggregating
