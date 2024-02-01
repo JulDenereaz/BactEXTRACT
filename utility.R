@@ -56,10 +56,9 @@ getFile <- function(fileData, lb, nfiles) {
     rawTableList$time <- rawTableList$time[!is.na(rawTableList$time)]
     subTableDF <- subTableDF[1:length(rawTableList$time),]
     
-    subTableDF <- subTableDF[, -grepl("temp|cycle|time", tolower(colnames(subTableDF)))]
+    subTableDF <- subTableDF[, !grepl("temp|cycle|time", tolower(colnames(subTableDF)))]
     #\u00B0 is the ° symbol
-    subTableDF <- subTableDF[, -grepl("\u00B0", tolower(colnames(subTableDF)))]
-    
+    subTableDF <- subTableDF[, !grepl("\u00B0", tolower(colnames(subTableDF)))]
     # 
 
     if(any(length(name) == 0, is.na(name), name == "")) {

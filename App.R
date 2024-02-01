@@ -363,7 +363,7 @@ server <- function(input, output, session) {
       fluidPage(
         list(
           splitLayout(
-            selectInput('timeScaleChange', 'Time scale units:', selected=orNull(v$settings$norm_baseOD, "Seconds"), choices = c("Seconds", "Minutes", "Hours", "hh:mm:ss"))
+            selectInput('timeScaleChange', 'Time scale base unit:', selected=orNull(v$settings$norm_baseOD, "Seconds"), choices = c("Seconds", "Minutes", "Hours", "hh:mm:ss"))
           ),
           bsTooltip("timeScaleChange", "Base unit of the time scale in raw data", placement = "left", trigger = "hover", options = NULL),
 
@@ -475,7 +475,10 @@ server <- function(input, output, session) {
     }
     req(input$conditionsUI_Input)
     v$conditions <- formartConditions(input$conditionsUI_Input)
-    
+    if(max(v$timeScaleRaw) > 500) {
+      showNotification("The time scale seems too big. Did you adjust the unit ?", type="error")
+      return()
+    }
     
     #Aggregating technical replicate by mean
     if(input$techAggr != "None") {
